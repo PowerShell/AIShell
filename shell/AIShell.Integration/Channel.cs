@@ -18,12 +18,14 @@ public class Channel : IDisposable
     private readonly MethodInfo _psrlInsert, _psrlRevertLine, _psrlAcceptLine;
     private readonly ManualResetEvent _connSetupWaitHandler;
     private readonly Predictor _predictor;
+    private readonly ScriptBlock _onIdleAction;
 
     private ShellClientPipe _clientPipe;
     private ShellServerPipe _serverPipe;
     private bool? _setupSuccess;
     private Exception _exception;
     private Thread _serverThread;
+    private CodePostData _pendingPostCodeData;
 
     private Channel(Runspace runspace, Type psConsoleReadLineType)
     {
@@ -44,6 +46,7 @@ public class Channel : IDisposable
         _psrlAcceptLine = _psrlType.GetMethod("AcceptLine", bindingFlags);
 
         _predictor = new Predictor();
+        _onIdleAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdleHandler()");
     }
 
     public static Channel CreateSingleton(Runspace runspace, Type psConsoleReadLineType)
@@ -165,9 +168,22 @@ public class Channel : IDisposable
         }
     }
 
+    [Hidden()]
+    public void OnIdleHandler()
+    {
+        if (_pendingPostCodeData is not null)
+        {
+            PSRLInsert(_pendingPostCodeData.CodeToInsert);
+            _predictor.SetCandidates(_pendingPostCodeData.PredictionCandidates);
+            _pendingPostCodeData = null;
+        }
+    }
+
     private void OnPostCode(PostCodeMessage postCodeMessage)
     {
-        if (!Console.TreatControlCAsInput || postCodeMessage.CodeBlocks.Count is 0)
+        // Ignore 'code post' request when a posting operation is on-going.
+        // This most likely would happen when user run 'code post' mutliple times to post the same code, which is safe to ignore.
+        if (_pendingPostCodeData is not null || postCodeMessage.CodeBlocks.Count is 0)
         {
             return;
         }
@@ -201,11 +217,30 @@ public class Channel : IDisposable
             codeToInsert = sb.ToString();
         }
 
+        // When PSReadLine is actively running, 'TreatControlCAsInput' would be set to 'true' because
+        // it handles 'Ctrl+c' as regular input.
+        // When the value is 'false', it means PowerShell is still busy running scripts or commands.
         if (Console.TreatControlCAsInput)
         {
             PSRLRevertLine();
             PSRLInsert(codeToInsert);
             _predictor.SetCandidates(predictionCandidates);
+        }
+        else
+        {
+            _pendingPostCodeData = new CodePostData(codeToInsert, predictionCandidates);
+            // We use script block handler instead of a delegate handler because the latter will run
+            // in a background thread, while the former will run in the pipeline thread, which is way
+            // more predictable.
+            _runspace.Events.SubscribeEvent(
+                source: null,
+                eventName: null,
+                sourceIdentifier: PSEngineEvent.OnIdle,
+                data: null,
+                action: _onIdleAction,
+                supportEvent: true,
+                forwardEvent: false,
+                maxTriggerCount: 1);
         }
     }
 
@@ -246,6 +281,8 @@ public class Channel : IDisposable
         _psrlAcceptLine.Invoke(null, [null, null]);
     }
 }
+
+internal record CodePostData(string CodeToInsert, List<PredictionCandidate> PredictionCandidates);
 
 public class Init : IModuleAssemblyCleanup
 {

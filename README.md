@@ -77,6 +77,10 @@ README in the each agent folder.
 
 To learn more about how to create an agent for yourself please see, [Creating an Agent][03].
 
+In order to use the `openai-gpt` agent you will need a valid Azure OpenAI service or a public OpenAI
+key. For more information on how to get an Azure OpenAI service, see
+[Deploying Azure OpenAI Service](./docs/development/AzureOAIDeployment/DeployingAzureOAI.md).
+
 ### Chat commands
 
 By default, `aish` provides a base set of chat `/` commands used to interact with the responses from

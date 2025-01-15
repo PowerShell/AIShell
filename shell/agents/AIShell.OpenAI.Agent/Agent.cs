@@ -151,6 +151,8 @@ public sealed class OpenAIAgent : ILLMAgent
             2. {1}. See details at
                  https://aka.ms/aish/openai
             3. Run '/refresh' to apply the new settings.
+
+            If you would like to learn more about deploying your own Azure OpenAI Service please see https://aka.ms/AIShell/DeployAOAI.
             """;
 
         if (_settings is null || _settings.GPTs.Count is 0)

@@ -65,7 +65,7 @@ public class Bash : ILanguage
         switch (lang.ToLower())
         {
             case "sh":
-                return true;
+            case "shell":
             case "azurecli":
                 return true;
             default:

@@ -161,6 +161,8 @@ public sealed class AzureAgent : ILLMAgent
     {
         IHost host = shell.Host;
         CancellationToken cancellationToken = shell.CancellationToken;
+
+        _copilotResponse = null;
         ResetArgumentPlaceholder();
 
         try
@@ -214,6 +216,9 @@ public sealed class AzureAgent : ILLMAgent
         IHost host = shell.Host;
         CancellationToken token = shell.CancellationToken;
 
+        _copilotResponse = null;
+        ResetArgumentPlaceholder();
+
         if (_turnsLeft is 0)
         {
             host.WriteLine("\nSorry, you've reached the maximum length of a conversation. Please run '/refresh' to start a new conversation.\n");
@@ -243,8 +248,6 @@ public sealed class AzureAgent : ILLMAgent
 
             if (_copilotResponse.ChunkReader is null)
             {
-                ResetArgumentPlaceholder();
-
                 if (_copilotResponse.IsError)
                 {
                     string errorMessage = _copilotResponse.Text;
@@ -325,11 +328,22 @@ public sealed class AzureAgent : ILLMAgent
 
             Telemetry.Trace(AzTrace.Chat(_copilotResponse));
         }
-        catch (Exception ex) when (ex is TokenRequestException or ConnectionDroppedException)
+        catch (Exception ex)
         {
-            host.WriteErrorLine(ex.Message);
-            host.WriteErrorLine("Please run '/refresh' to start a new chat session and try again.");
-            return false;
+            if (ex is TokenRequestException or ConnectionDroppedException)
+            {
+                host.WriteErrorLine(ex.Message);
+                host.WriteErrorLine("Please run '/refresh' to start a new chat session and try again.");
+                return false;
+            }
+
+            Log.Error(ex, "Exception thrown when processing the query '{0}'", input);
+            if (_copilotResponse?.Text is not null)
+            {
+                Log.Error("Response text:\n{0}", _copilotResponse.Text);
+            }
+
+            throw;
         }
 
         return true;

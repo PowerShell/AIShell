@@ -56,9 +56,9 @@ internal class ChatSession : IDisposable
             ["getformstate"] = true,
             ["notificationcopilotbuttonallerror"] = false,
             ["chitchatprompt"] = true,
+            ["azurepluginstore"] = true,
             // TODO: the streaming is slow and not sending chunks, very clumsy for now.
             // ["streamresponse"] = true,
-            // ["azurepluginstore"] = true,
         };
     }
 
@@ -239,6 +239,11 @@ internal class ChatSession : IDisposable
                     content = new {
                         flights = _flights
                     }
+                },
+                new {
+                    contentType = Utils.JsonContentType,
+                    name = "azurecopilot/authorization",
+                    content = $"Bearer {_accessToken.Token}"
                 }
             },
         };

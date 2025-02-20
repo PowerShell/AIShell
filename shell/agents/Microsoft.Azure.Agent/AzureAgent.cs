@@ -27,7 +27,7 @@ public sealed class AzureAgent : ILLMAgent
         2. DO NOT include the command for creating a new resource group unless the query explicitly asks for it. Otherwise, assume a resource group already exists.
         3. DO NOT include an additional example with made-up values unless it provides additional context or value beyond the initial command.
         4. DO NOT use the line continuation operator (backslash `\` in Bash) in the generated commands.
-        5. Always represent a placeholder in the form of `<placeholder-name>`.
+        5. Always represent a placeholder in the form of `<placeholder-name>` and enclose it within double quotes.
         6. Always use the consistent placeholder names across all your responses. For example, `<resourceGroupName>` should be used for all the places where a resource group name value is needed.
         7. When the commands contain placeholders, the placeholders should be summarized in markdown bullet points at the end of the response in the same order as they appear in the commands, following this format:
            ```
@@ -260,9 +260,9 @@ public sealed class AzureAgent : ILLMAgent
                 {
                     // Process CLI handler response specially to support parameter injection.
                     ResponseData data = null;
-                    if (_copilotResponse.TopicName == CopilotActivity.CLIHandlerTopic)
+                    if (_copilotResponse.TopicName is CopilotActivity.CLIHandlerTopic or CopilotActivity.PSHandlerTopic)
                     {
-                        data = ParseCLIHandlerResponse(shell);
+                        data = ParseCodeResponse(shell);
                     }
 
                     if (data?.PlaceholderSet is not null)
@@ -349,7 +349,7 @@ public sealed class AzureAgent : ILLMAgent
         return true;
     }
 
-    private ResponseData ParseCLIHandlerResponse(IShell shell)
+    private ResponseData ParseCodeResponse(IShell shell)
     {
         string text = _copilotResponse.Text;
         List<CodeBlock> codeBlocks = shell.ExtractCodeBlocks(text, out List<SourceInfo> sourceInfos);
@@ -402,6 +402,7 @@ public sealed class AzureAgent : ILLMAgent
         ResponseData data = new() {
             Text = text,
             CommandSet = commands,
+            TopicName = _copilotResponse.TopicName,
             PlaceholderSet = placeholders,
             Locale = _copilotResponse.Locale,
         };

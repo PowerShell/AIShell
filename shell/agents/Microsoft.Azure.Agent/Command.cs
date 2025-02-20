@@ -33,9 +33,19 @@ internal sealed class ReplaceCommand : CommandBase
         const string vtReset = "\x1b[0m";
 
         StringBuilder cStr = new(capacity: command.Length + parameter.Length + placeholder.Length + 50);
-        cStr.Append(vtItalic)
-            .Append(vtCommand).Append("az").Append(vtFgDefault).Append(command.AsSpan(2)).Append(' ')
-            .Append(vtParameter).Append(parameter).Append(vtFgDefault).Append(' ')
+        cStr.Append(vtItalic);
+
+        int index = command.IndexOf(' ');
+        if (index is -1)
+        {
+            cStr.Append(vtCommand).Append(command).Append(vtFgDefault).Append(' ');
+        }
+        else
+        {
+            cStr.Append(vtCommand).Append(command.AsSpan(0, index)).Append(vtFgDefault).Append(command.AsSpan(index)).Append(' ');
+        }
+
+        cStr.Append(vtParameter).Append(parameter).Append(vtFgDefault).Append(' ')
             .Append(vtVariable).Append(placeholder).Append(vtFgDefault)
             .Append(vtReset);
 
@@ -125,15 +135,9 @@ internal sealed class ReplaceCommand : CommandBase
 
                 // Prompt for argument without printing captions again.
                 string value = host.PromptForArgument(argInfo, printCaption: false);
+                value = value?.Trim();
                 if (!string.IsNullOrEmpty(value))
                 {
-                    // Add quotes for the value if needed.
-                    value = value.Trim();
-                    if (value.StartsWith('-') || value.Contains(' ') || value.Contains('|'))
-                    {
-                        value = $"\"{value}\"";
-                    }
-
                     _values.Add(item.Name, value);
                     _agent.SaveUserValue(item.Name, value);
 

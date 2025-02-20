@@ -91,6 +91,43 @@ function Start-Build
     $app_csproj = GetProjectFile $app_dir
     dotnet publish $app_csproj -c $Configuration -o $app_out_dir -r $RID --sc
 
+    ## Move the 'Modules' folder to the appbase folder.
+    if ($LASTEXITCODE -eq 0) {
+        ## Remove the artifacts that are not for the current platform, to reduce size.
+        $otherPlatDir = Join-Path $app_out_dir 'runtimes' ($IsWindows ? 'unix' : 'win')
+        if (Test-Path $otherPlatDir -PathType Container) {
+            Remove-Item $otherPlatDir -Recurse -Force -ErrorAction Stop
+        }
+
+        ## Move the 'Modules' folder and if possible, remove the 'runtimes' folder all together afterward.
+        $platDir = Join-Path $app_out_dir 'runtimes' ($IsWindows ? 'win' : 'unix') 'lib'
+        if (Test-Path $platDir -PathType Container) {
+            $moduleDir = Get-ChildItem $platDir -Directory -Include 'Modules' -Recurse
+            if ($moduleDir) {
+                ## Remove the existing 'Modules' folder if it already exists.
+                $target = Join-Path $app_out_dir 'Modules'
+                if (Test-Path $target -PathType Container) {
+                    Remove-Item $target -Recurse -Force -ErrorAction Stop
+                }
+
+                ## Move 'Modules' folder.
+                Move-Item $moduleDir.FullName $app_out_dir -Force -ErrorAction Stop
+
+                ## Remove the 'runtimes' folder if possible.
+                $parent = $moduleDir.Parent
+                while ($parent.FullName -ne $app_out_dir) {
+                    $files = Get-ChildItem $parent.FullName -File -Recurse
+                    if (-not $files) {
+                        Remove-Item $parent.FullName -Recurse -Force -ErrorAction Stop
+                        $parent = $parent.Parent
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+    }
+
     if ($LASTEXITCODE -eq 0 -and $AgentToInclude -contains 'openai-gpt') {
         Write-Host "`n[Build the OpenAI agent ...]`n" -ForegroundColor Green
         $openai_csproj = GetProjectFile $openai_agent_dir

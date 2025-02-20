@@ -1,7 +1,12 @@
+using System.Collections.Concurrent;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Management.Automation.Runspaces;
 
 namespace Microsoft.Azure.Agent;
+
+using PowerShell = System.Management.Automation.PowerShell;
+using ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy;
 
 internal static class Utils
 {
@@ -97,4 +102,62 @@ internal class ChatMessage
 {
     public string Role { get; set; }
     public string Content { get; set; }
+}
+
+internal class PowerShellPool
+{
+    private readonly int _size;
+    private readonly BlockingCollection<PowerShell> _pool;
+
+    internal PowerShellPool(int size)
+    {
+        _size = size;
+        _pool = new(boundedCapacity: size);
+
+        var iss = InitialSessionState.CreateDefault();
+        iss.ImportPSModule("Az.Accounts");
+
+        if (OperatingSystem.IsWindows())
+        {
+            iss.ExecutionPolicy = ExecutionPolicy.Bypass;
+        }
+
+        // Pre-populate the pool on worker thread.
+        Task.Factory.StartNew(
+            CreatePowerShell,
+            iss,
+            CancellationToken.None,
+            TaskCreationOptions.DenyChildAttach,
+            TaskScheduler.Default);
+    }
+
+    private void CreatePowerShell(object state)
+    {
+        var iss = (InitialSessionState)state;
+
+        for (int i = 0; i < _size; i++)
+        {
+            var runspace = RunspaceFactory.CreateRunspace(iss);
+            runspace.Open();
+
+            var pwsh = PowerShell.Create(runspace);
+            _pool.Add(pwsh);
+        }
+    }
+
+    internal PowerShell Checkout()
+    {
+        return _pool.Take();
+    }
+
+    internal void Return(PowerShell pwsh)
+    {
+        if (pwsh is not null)
+        {
+            pwsh.Commands.Clear();
+            pwsh.Streams.ClearStreams();
+
+            _pool.Add(pwsh);
+        }
+    }
 }

@@ -1,23 +1,31 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using System.Management.Automation;
+using System.Management.Automation.Language;
+using System.Management.Automation.Runspaces;
 using AIShell.Abstraction;
 using Serilog;
 
 namespace Microsoft.Azure.Agent;
 
+using PowerShell = System.Management.Automation.PowerShell;
+
 internal class DataRetriever : IDisposable
 {
+    private const int WorkerCount = 3;
     private const string MetadataQueryTemplate = "{{\"command\":\"{0}\"}}";
     private const string MetadataEndpoint = "https://cli-validation-tool-meta-qry.azurewebsites.net/api/command_metadata";
 
     private static readonly string s_azCompleteCmd, s_azCompleteArg;
     private static readonly Dictionary<string, NamingRule> s_azNamingRules;
     private static readonly ConcurrentDictionary<string, AzCLICommand> s_azStaticDataCache;
+    private static readonly PowerShellPool s_psPool;
 
     private readonly Task _rootTask;
     private readonly HttpClient _httpClient;
@@ -29,6 +37,7 @@ internal class DataRetriever : IDisposable
 
     static DataRetriever()
     {
+        s_psPool = new(size: WorkerCount);
         List<NamingRule> rules = [
             new("API Management Service",
                 "apim",
@@ -351,15 +360,111 @@ internal class DataRetriever : IDisposable
     {
         _stop = false;
         _httpClient = httpClient;
-        _semaphore = new SemaphoreSlim(3, 3);
+        _semaphore = new SemaphoreSlim(WorkerCount, WorkerCount);
         _placeholders = new(capacity: data.PlaceholderSet.Count);
         _placeholderMap = new(capacity: data.PlaceholderSet.Count);
 
-        PairPlaceholders(data);
+        switch (data.TopicName)
+        {
+            case CopilotActivity.CLIHandlerTopic:
+                PairPlaceholdersForCLICode(data);
+                break;
+            case CopilotActivity.PSHandlerTopic:
+                PairPlaceholdersForPSCode(data);
+                break;
+            default:
+                throw new UnreachableException();
+        }
+
         _rootTask = Task.Run(StartProcessing);
     }
 
-    private void PairPlaceholders(ResponseData data)
+    private void PairPlaceholdersForPSCode(ResponseData data)
+    {
+        var asts = new Dictionary<string, ScriptBlockAst>(data.CommandSet.Count);
+
+        foreach (var item in data.PlaceholderSet)
+        {
+            string command = null, parameter = null;
+            VariableExpressionAst variable = null;
+
+            foreach (var cmd in data.CommandSet)
+            {
+                if (!asts.TryGetValue(cmd.Script, out ScriptBlockAst sbAst))
+                {
+                    sbAst = Parser.ParseInput(cmd.Script, out _, out _);
+                    asts.Add(cmd.Script, sbAst);
+                }
+
+                if (variable is null)
+                {
+                    Ast argAst = sbAst.Find(
+                        predicate: a => a is StringConstantExpressionAst strConst && strConst.Value == item.Name,
+                        searchNestedScriptBlocks: false);
+
+                    if (argAst?.Parent is CommandAst cmdAst)
+                    {
+                        (command, parameter) = GetCommandAndParameter(cmdAst, argAst);
+                        break;
+                    }
+
+                    // The generated powershell script may just assign the placeholders to some variables
+                    // and use those variables in the command invocation. In that case, we search for those
+                    // variables instead.
+                    if (argAst?.Parent is CommandExpressionAst cmdExpr &&
+                        cmdExpr.Parent is AssignmentStatementAst assignment &&
+                        assignment.Left is VariableExpressionAst var)
+                    {
+                        variable = var;
+                    }
+                }
+
+                if (variable is not null)
+                {
+                    Ast argAst = sbAst.Find(
+                        predicate: a => a is VariableExpressionAst v && v.VariablePath.UserPath == variable.VariablePath.UserPath && v.Parent is CommandAst,
+                        searchNestedScriptBlocks: false);
+
+                    if (argAst is not null)
+                    {
+                        var cmdAst = (CommandAst)argAst.Parent;
+                        (command, parameter) = GetCommandAndParameter(cmdAst, argAst);
+
+                        break;
+                    }
+                }
+            }
+
+            if (command is null)
+            {
+                // This may happen if the generated PowerShell script assigns the placeholder values to a set of variables at the beginning.
+                Log.Debug("[DataRetriever] Failed to pair the placeholder '{0}' for PowerShell code.", item.Name);
+            }
+
+            ArgumentPair pair = new(item, command, parameter, CopilotActivity.PSHandlerTopic);
+            _placeholders.Add(pair);
+            _placeholderMap.Add(item.Name, pair);
+        }
+
+        static (string command, string parameter) GetCommandAndParameter(CommandAst cmdAst, Ast argAst)
+        {
+            string command = ((StringConstantExpressionAst)cmdAst.CommandElements[0]).Value;
+            string parameter = null;
+
+            for (int i = 0; i < cmdAst.CommandElements.Count; i++)
+            {
+                if (cmdAst.CommandElements[i] == argAst)
+                {
+                    parameter = cmdAst.CommandElements[i-1].Extent.Text;
+                    break;
+                }
+            }
+
+            return (command, parameter);
+        }
+    }
+
+    private void PairPlaceholdersForCLICode(ResponseData data)
     {
         var cmds = new Dictionary<string, string>(data.CommandSet.Count);
 
@@ -391,7 +496,18 @@ internal class DataRetriever : IDisposable
                             continue;
                         }
 
-                        int paramIndex = script.LastIndexOf("--", argIndex);
+                        // The placeholder value may be enclosed in double or single quotes.
+                        if (script[argIndex - 1] is '\'' or '\"')
+                        {
+                            argIndex--;
+                        }
+
+                        // The generated AzCLI command may contain both long (--xxx) and short (-x) flag forms
+                        // for its parameters. So we need to properly handle it when looking for the parameter
+                        // right before the placeholder value.
+                        int paramIndex = 1 + Math.Max(
+                            script.LastIndexOf(" --", argIndex),
+                            script.LastIndexOf(" -", argIndex));
                         parameter = script.AsSpan(paramIndex, argIndex - paramIndex).Trim().ToString();
 
                         placeholderFound = true;
@@ -406,6 +522,7 @@ internal class DataRetriever : IDisposable
                         command = script;
                         parameter = null;
 
+                        Log.Debug("[DataRetriever] Non-AzCLI command: '{0}'", command);
                         placeholderFound = true;
                         break;
                     }
@@ -417,7 +534,7 @@ internal class DataRetriever : IDisposable
                 }
             }
 
-            ArgumentPair pair = new(item, command, parameter);
+            ArgumentPair pair = new(item, command, parameter, CopilotActivity.CLIHandlerTopic);
             _placeholders.Add(pair);
             _placeholderMap.Add(item.Name, pair);
         }
@@ -469,10 +586,10 @@ internal class DataRetriever : IDisposable
             return new ArgumentInfo(item.Name, item.Desc, restriction: null, dataType, item.ValidValues);
         }
 
-        // Handle non-AzCLI command.
-        if (pair.Parameter is null)
+        // Pairing placeholder with command and parameter was not successful.
+        // This may happen when the generated code is unexpected or contains commands that is not AzPS or AzCLI.
+        if (pair.Command is null || pair.Parameter is null)
         {
-            Log.Debug("[DataRetriever] Non-AzCLI command: '{0}'", pair.Command);
             return new ArgumentInfo(item.Name, item.Desc, dataType);
         }
 
@@ -483,8 +600,7 @@ internal class DataRetriever : IDisposable
             return new ArgumentInfoWithNamingRule(item.Name, item.Desc, restriction, rule);
         }
 
-        if (string.Equals(pair.Parameter, "--name", StringComparison.OrdinalIgnoreCase)
-            && pair.Command.EndsWith(" create", StringComparison.OrdinalIgnoreCase))
+        if (IsCreatingNewResourceWithAzCLI(pair) || IsCreatingNewResourceWithAzPS(pair))
         {
             // Placeholder is for the name of a new resource to be created, but not in our cache.
             return new ArgumentInfo(item.Name, item.Desc, dataType);
@@ -492,11 +608,165 @@ internal class DataRetriever : IDisposable
 
         if (_stop) { return null; }
 
-        List<string> suggestions = GetArgValues(pair);
+        IList<string> suggestions = pair.TopicName is CopilotActivity.CLIHandlerTopic
+            ? GetArgValuesForAzCLI(pair)
+            : GetArgValuesForAzPS(pair);
         return new ArgumentInfo(item.Name, item.Desc, restriction: null, dataType, suggestions);
+
+
+        /* local helper methods */
+        static bool IsCreatingNewResourceWithAzCLI(ArgumentPair pair)
+        {
+            return pair.TopicName is CopilotActivity.CLIHandlerTopic
+                && string.Equals(pair.Parameter, "--name", StringComparison.OrdinalIgnoreCase)
+                && pair.Command.EndsWith(" create", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool IsCreatingNewResourceWithAzPS(ArgumentPair pair)
+        {
+            return pair.TopicName is CopilotActivity.PSHandlerTopic
+                && string.Equals(pair.Parameter, "-Name", StringComparison.OrdinalIgnoreCase)
+                && pair.Command.StartsWith("New-", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
-    private List<string> GetArgValues(ArgumentPair pair)
+    private IList<string> GetArgValuesForAzPS(ArgumentPair pair)
+    {
+        string command = pair.Command;
+        string parameter = pair.Parameter.TrimStart('-');
+
+        Runspace defaultRunspace = Runspace.DefaultRunspace;
+        PowerShell pwsh = s_psPool.Checkout();
+        Runspace.DefaultRunspace = pwsh.Runspace;
+
+        try
+        {
+            CommandInfo cmdInfo = null;
+            var r = pwsh.AddCommand("Get-Command").AddParameter("Name", command).Invoke<CommandInfo>();
+            cmdInfo = r.FirstOrDefault();
+
+            if (cmdInfo is null)
+            {
+                Log.Debug("[DataRetriever] Cannot find the command '{0}'", command);
+                return null;
+            }
+
+            if (!cmdInfo.Parameters.TryGetValue(parameter, out ParameterMetadata paramMetadata))
+            {
+                Log.Debug("[DataRetriever] Cannot find the parameter '{0}' for command '{1}'", parameter, command);
+                return null;
+            }
+
+            Log.Debug("[DataRetriever] Perform tab completion for '{0} {1} '", command, pair.Parameter);
+
+            if (paramMetadata.ParameterType.IsEnum)
+            {
+                Log.Debug("[DataRetriever]  - Enum values completion");
+                return Enum.GetNames(paramMetadata.ParameterType);
+            }
+
+            List<string> returnValues = null;
+            foreach (var attribute in paramMetadata.Attributes)
+            {
+                if (_stop)
+                {
+                    return null;
+                }
+
+                if (attribute is ValidateSetAttribute setAtt)
+                {
+                    Log.Debug("[DataRetriever]  - ValidateSetAttribute completion");
+
+                    returnValues = new(capacity: setAtt.ValidValues.Count);
+                    foreach (string value in setAtt.ValidValues)
+                    {
+                        if (value != string.Empty)
+                        {
+                            returnValues.Add(value);
+                        }
+                    }
+
+                    return returnValues;
+                }
+
+                if (attribute is ArgumentCompleterAttribute comAtt)
+                {
+                    Log.Debug("[DataRetriever]  - ArgumentCompleterAttribute completion");
+
+                    if (comAtt.ScriptBlock is not null)
+                    {
+                        Log.Debug("[DataRetriever]    - Invoke attr.ScriptBlock");
+
+                        // Today, none of Azure PowerShell's argument completer attributes use the 'CommandAst' and
+                        // the fake bound parameters. So we pass 'null' for both of them for simplicity.
+                        Collection<PSObject> results = comAtt.ScriptBlock.Invoke(command, parameter, "", null, null);
+                        if (results?.Count > 0)
+                        {
+                            returnValues = new(capacity: results.Count);
+                            foreach (var result in results)
+                            {
+                                if (result.BaseObject is CompletionResult cr)
+                                {
+                                    returnValues.Add(cr.CompletionText);
+                                }
+                                else
+                                {
+                                    returnValues.Add(result.ToString());
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Log.Debug("[DataRetriever]    - Invoke IArgumentCompleter");
+
+                        IArgumentCompleter completer = comAtt.Type is not null
+                            ? Activator.CreateInstance(comAtt.Type) as IArgumentCompleter
+                            : comAtt is IArgumentCompleterFactory factory
+                                ? factory.Create()
+                                : null;
+
+                        // Today, Azure PowerShell's argument completer attributes don't use 'CommandAst' and the fake bound parameters.
+                        // So we pass 'null' for both of them for simplicity.
+                        IEnumerable<CompletionResult> results = completer?.CompleteArgument(command, parameter, "", null, null);
+                        if (results is not null)
+                        {
+                            foreach (var result in results)
+                            {
+                                returnValues ??= [];
+                                returnValues.Add(result.CompletionText);
+                            }
+                        }
+                    }
+
+                    return returnValues;
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            string commandLine = $"{command} {pair.Parameter}";
+            Log.Error(e, "[DataRetriever] Exception while performing argument completion for '{0}'", commandLine);
+            if (Telemetry.Enabled)
+            {
+                Dictionary<string, string> details = new()
+                {
+                    ["Command"] = commandLine,
+                    ["Message"] = "Argument completion for AzPS command raised an exception."
+                };
+                Telemetry.Trace(AzTrace.Exception(details), e);
+            }
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = defaultRunspace;
+            s_psPool.Return(pwsh);
+        }
+
+        return null;
+    }
+
+    private List<string> GetArgValuesForAzCLI(ArgumentPair pair)
     {
         // First, try to get static argument values if they exist.
         bool hasCompleter = true;
@@ -690,13 +960,15 @@ internal class ArgumentPair
     internal PlaceholderItem Placeholder { get; }
     internal string Command { get; }
     internal string Parameter { get; }
+    internal string TopicName { get; }
     internal Task<ArgumentInfo> ArgumentInfo { set; get; }
 
-    internal ArgumentPair(PlaceholderItem placeholder, string command, string parameter)
+    internal ArgumentPair(PlaceholderItem placeholder, string command, string parameter, string topicName)
     {
         Placeholder = placeholder;
         Command = command;
         Parameter = parameter;
+        TopicName = topicName;
         ArgumentInfo = null;
     }
 }

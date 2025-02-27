@@ -5,7 +5,7 @@
 
 [CmdletBinding(DefaultParameterSetName = "Install")]
 param(
-    [Parameter(HelpMessage = "Specify the version to install", ParameterSetName = "Install")]
+    [Parameter(HelpMessage = "Specify the version to install, e.g. 'v1.0.0-preview.2'", ParameterSetName = "Install")]
     [ValidatePattern("^v\d+\.\d+\.\d+(-\w+\.\d{1,2})?$")]
     [string] $Version,
 

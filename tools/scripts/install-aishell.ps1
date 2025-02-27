@@ -3,8 +3,13 @@
 
 #Requires -Version 7.4.6
 
+[CmdletBinding(DefaultParameterSetName = "Install")]
 param(
-    [Parameter(HelpMessage = "Specify this parameter to uninstall AI Shell")]
+    [Parameter(HelpMessage = "Specify the version to install", ParameterSetName = "Install")]
+    [ValidatePattern("^v\d+\.\d+\.\d+(-\w+\.\d{1,2})?$")]
+    [string] $Version,
+
+    [Parameter(HelpMessage = "Specify this parameter to uninstall AI Shell", ParameterSetName = "Uninstall")]
     [switch] $Uninstall
 )
 
@@ -13,6 +18,7 @@ $Script:MacInstallationLocation = "/usr/local/AIShell"
 $Script:WinInstallationLocation = "$env:LOCALAPPDATA\Programs\AIShell"
 $Script:InstallLocation = $null
 $Script:PackageURL = $null
+$Script:ModuleVersion = $null
 
 function Resolve-Environment {
     if ($PSVersionTable.PSVersion -lt [version]"7.4.6") {
@@ -22,10 +28,14 @@ function Resolve-Environment {
         throw "Sorry, this install script is only compatible with Windows and macOS. If you want to install on Linux, please download the package directly from the GitHub repo at aka.ms/AIShell-Repo."
     }
 
-    ($platShortName, $platFullName, $pkgExt, $location) = if ($IsWindows) {
+    ($platShortName, $platFullName, $pkgExt, $Script:InstallLocation) = if ($IsWindows) {
         'win', 'Windows', 'zip', $Script:WinInstallationLocation
     } else {
         'osx', 'macOS', 'tar.gz', $Script:MacInstallationLocation
+    }
+
+    if ($Uninstall) {
+        return
     }
 
     $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
@@ -33,8 +43,26 @@ function Resolve-Environment {
         throw "AI Shell doesn't support the $architecture architecture on $platFullName."
     }
 
-    $Script:InstallLocation = $location
-    $Script:PackageURL = "https://github.com/PowerShell/AIShell/releases/download/v1.0.0-preview.1/AIShell-1.0.0-preview.1-${platShortName}-$($architecture.ToLower()).${pkgExt}"
+    $tags = (Invoke-RestMethod -Uri "https://api.github.com/repos/PowerShell/AIShell/tags" -ErrorAction Stop).name
+    if ($Version -and $Version -notin $tags) {
+        throw "The specified version '$Version' doesn't exist. Available versions are: $($tags -join ', ')"
+    }
+
+    $tagToUse = [string]::IsNullOrEmpty($Version) ? $tags[0] : $Version
+    $appVersion = $tagToUse.TrimStart('v')
+
+    $Script:PackageURL = "https://github.com/PowerShell/AIShell/releases/download/${tagToUse}/AIShell-${appVersion}-${platShortName}-$($architecture.ToLower()).${pkgExt}"
+
+    $dashIndex = $appVersion.IndexOf('-')
+    $Script:ModuleVersion = if ($dashIndex -eq -1) {
+        ## The mapping between module version and the app version is not clear yet.
+        throw "Not implemented for stable releases."
+    } else {
+        $previewLabel = $appVersion.Substring($dashIndex + 1)
+        $previewDigit = $previewLabel.Substring($previewLabel.LastIndexOf('.') + 1)
+        $patchDotIndex = $appVersion.LastIndexOf('.', $dashIndex)
+        $appVersion.Substring(0, $patchDotIndex) + ".$previewDigit-" + $previewLabel.Replace('.', '')
+    }
 }
 
 function Install-AIShellApp {
@@ -148,6 +176,16 @@ function Uninstall-AIShellApp {
                     Join-String -Separator ';'
                 [Environment]::SetEnvironmentVariable("Path", $newUserPath, [EnvironmentVariableTarget]::User)
             }
+
+            # Update the process-scope Path env variables to remove AIShell.
+            $procPath = $env:Path
+            if ($procPath.Contains($destination)) {
+                Write-Host "Removing AI Shell app from the process-scope Path environment variable ..."
+                $newProcPath = $procPath.Split(';', [StringSplitOptions]::RemoveEmptyEntries -bor [StringSplitOptions]::TrimEntries) |
+                    Where-Object { $_ -ne $destination } |
+                    Join-String -Separator ';'
+                $env:Path = $newProcPath
+            }
         } else {
             sudo rm -rf $destination
             if ($LASTEXITCODE -ne 0) {
@@ -167,8 +205,9 @@ function Uninstall-AIShellApp {
 
 function Install-AIShellModule {
     if ($IsWindows) {
-        Write-Host "Installing the PowerShell module 'AIShell' ..."
-        Install-PSResource -Name AIShell -Repository PSGallery -Prerelease -TrustRepository -ErrorAction Stop -WarningAction SilentlyContinue
+        $modVersion = $Script:ModuleVersion
+        Write-Host "Installing the PowerShell module 'AIShell' $modVersion ..."
+        Install-PSResource -Name AIShell -Repository PSGallery -Prerelease -TrustRepository -Version $modVersion -ErrorAction Stop -WarningAction SilentlyContinue
     } else {
         Write-Host -ForegroundColor Yellow "Currently the AIShell PowerShell module will only work in iTerm2 terminal and still has limited support but if you would like to test it, you can install it with 'Install-PSResource -Name AIShell -Repository PSGallery -Prerelease'."
         Write-Host -ForegroundColor Yellow "The AI Shell app has been added to your path, please run 'aish' to use the standalone experience."
@@ -205,5 +244,5 @@ if ($Uninstall) {
     Install-AIShellModule
 
     $message = $IsWindows ? "'Start-AIShell'" : "'aish'"
-    Write-Host "`nInstallation succeeded. To learn more about AI Shell please visit https://aka.ms/AIShell-Docs. To get started please run $message to start AI Shell." -ForegroundColor Green
+    Write-Host "`nInstallation succeeded.`nTo learn more about AI Shell please visit https://aka.ms/AIShell-Docs.`nTo get started please run $message to start AI Shell." -ForegroundColor Green
 }

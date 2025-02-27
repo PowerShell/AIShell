@@ -155,6 +155,8 @@ function New-TarballPackage
 
         $permission = Get-ChildItem $executable | ForEach-Object UnixFileMode
         Write-Verbose "File permission: $permission" -Verbose
+    } else {
+        throw "Failed to create the package because the application 'chmod' cannot be found"
     }
 
     if (Get-Command -Name tar -CommandType Application -ErrorAction Ignore) {

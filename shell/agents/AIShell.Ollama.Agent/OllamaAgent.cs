@@ -110,7 +110,7 @@ public sealed partial class OllamaAgent : ILLMAgent
     /// <summary>
     /// Get commands that an agent can register to the shell when being loaded.
     /// </summary>
-    public IEnumerable<CommandBase> GetCommands() => null;
+    public IEnumerable<CommandBase> GetCommands() => [new ConfigCommand(this), new ModelCommand(this), new SystemPromptCommand(this)];
 
     /// <summary>
     /// Gets the path to the setting file of the agent.
@@ -148,6 +148,11 @@ public sealed partial class OllamaAgent : ILLMAgent
         return Task.CompletedTask;
     }
 
+    public void ResetContext()
+    {
+        _request.Context = null;
+    }
+
     /// <summary>
     /// Main chat function that takes the users input and passes it to the LLM and renders it.
     /// </summary>
@@ -171,10 +176,17 @@ public sealed partial class OllamaAgent : ILLMAgent
             return false;
         }
 
+        var activeModel = await _settings.GetActiveModel().ConfigureAwait(false);
+
         // Prepare request
         _request.Prompt = input;
-        _request.Model = _settings.Model;
+        _request.Model = activeModel.Name;
         _request.Stream = _settings.Stream;
+
+        if (!string.IsNullOrWhiteSpace(_settings.RunningConfig.SystemPrompt))
+        {
+            _request.System = _settings.RunningConfig.SystemPrompt;
+        }
 
         try
         {
@@ -238,15 +250,23 @@ public sealed partial class OllamaAgent : ILLMAgent
         catch (HttpRequestException e)
         {
             host.WriteErrorLine($"{e.Message}");
-            host.WriteErrorLine($"Ollama model:    \"{_settings.Model}\"");
+            host.WriteErrorLine($"Ollama active model:    \"{activeModel.Name}\"");
             host.WriteErrorLine($"Ollama endpoint: \"{_settings.Endpoint}\"");
             host.WriteErrorLine($"Ollama settings: \"{SettingFile}\"");
+        }
+        finally
+        {
+            if (_settings.RunningConfig.ResetContext)
+            {
+                // Reset the request context
+            	ResetContext();
+            }
         }
 
         return true;
     }
 
-    private void ReloadSettings()
+    internal void ReloadSettings()
     {
         if (_reloadSettings)
         {
@@ -308,13 +328,20 @@ public sealed partial class OllamaAgent : ILLMAgent
             // 1. Install Ollama: `winget install Ollama.Ollama`
             // 2. Start Ollama API server: `ollama serve`
             // 3. Install Ollama model: `ollama pull phi3`
-
-            // Declare Ollama model
-            "Model": "phi3",
+            "Configs": [
+                {
+                    "Name": "PowerShell Expert",
+                    "Description": "A ollama agent with expertise in PowerShell scripting and command line utilities.",
+                    "ModelName": "phi3",
+                    "SystemPrompt": "1. You are a helpful and friendly assistant with expertise in PowerShell scripting and command line.\n2. Assume user is using the operating system `Windows 11` unless otherwise specified.\n3. Use the `code block` syntax in markdown to encapsulate any part in responses that is code, YAML, JSON or XML, but not table.\n4. When encapsulating command line code, use '```powershell' if it's PowerShell command; use '```sh' if it's non-PowerShell CLI command.\n5. When generating CLI commands, never ever break a command into multiple lines. Instead, always list all parameters and arguments of the command on the same line.\n6. Please keep the response concise but to the point. Do not overexplain."
+                }
+            ],
             // Declare Ollama endpoint
             "Endpoint": "http://localhost:11434",
             // Enable Ollama streaming
-            "Stream": false
+            "Stream": false,
+            // Specify the default model to use
+            "DefaultConfig": "PowerShell Expert",
         }
         """;
         File.WriteAllText(SettingFile, SampleContent, Encoding.UTF8);

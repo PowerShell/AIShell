@@ -35,8 +35,8 @@ internal class ChatSession : IDisposable
         // Keys and values for flights are from the portal request.
         _flights = new Dictionary<string, object>()
         {
-            ["openAIModel"] = "gpt4optuc",
-            ["openAIEndpointName"] = "norwayeast,australiaeast,westus",
+            ["openAIModel"] = "gpt4optum",
+            ["openAIEndpointName"] = "norwayeast,australiaeast,swedencentral",
             ["docsHandlerEndpoint"] = "learnDocs",
             ["unifiedcopilotdebug"] = false,
             ["unifiedcopilottest"] = false,

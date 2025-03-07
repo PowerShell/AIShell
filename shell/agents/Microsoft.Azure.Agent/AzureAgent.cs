@@ -57,7 +57,9 @@ public sealed class AzureAgent : ILLMAgent
 
         _chatSession = new ChatSession(_httpClient);
         _valueStore = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        _instructions = string.Format(InstructionPrompt, RuntimeInformation.OSDescription);
+        _instructions = string.Format(
+            InstructionPrompt,
+            OperatingSystem.IsMacOS() ? $"Mac OS X {Environment.OSVersion.Version}" : RuntimeInformation.OSDescription);
 
         Name = "azure";
         Company = "Microsoft";
@@ -419,13 +421,8 @@ public sealed class AzureAgent : ILLMAgent
         //  - `<second-placeholder>`: <concise-description>
         const string pattern = "- `{0}`:";
         int index = text.IndexOf(string.Format(pattern, first), begin);
-        if (index > 0 && IsInPlaceholderSection(text, index))
+        if (index > 0 && IsInPlaceholderSection(text, index, out begin))
         {
-            // Get the start index of the placeholder section.
-            int n = index - 2;
-            for (; text[n] is not '\n'; n--);
-            begin = n + 1;
-
             // For each placeholder, try to extract its description.
             foreach (var phItem in placeholders)
             {
@@ -456,7 +453,7 @@ public sealed class AzureAgent : ILLMAgent
         ReplaceKnownPlaceholders(data);
         return data;
 
-        static bool IsInPlaceholderSection(string text, int index)
+        static bool IsInPlaceholderSection(string text, int index, out int sectionStart)
         {
             // This section should immediately follow "Placeholders:" on the next line.
             // The "- `<xxx>`" part mostly starts at the beginning of the new line, but
@@ -471,9 +468,20 @@ public sealed class AzureAgent : ILLMAgent
                 }
             }
 
-            return firstNonSpaceCharBackward > 0
+            if (firstNonSpaceCharBackward > 0
                 && text[firstNonSpaceCharBackward] is '\n'
-                && text[firstNonSpaceCharBackward - 1] is ':';
+                && text[firstNonSpaceCharBackward - 1] is ':')
+            {
+                // Get the start index of the placeholder section.
+                int n = firstNonSpaceCharBackward - 1;
+                for (; text[n] is not '\n'; n--);
+
+                sectionStart = n + 1;
+                return true;
+            }
+
+            sectionStart = -1;
+            return false;
         }
     }
 

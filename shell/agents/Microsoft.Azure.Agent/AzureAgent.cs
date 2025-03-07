@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 
 using AIShell.Abstraction;
@@ -22,11 +23,11 @@ public sealed class AzureAgent : ILLMAgent
     private const string SettingFileName = "az.config.json";
     private const string LoggingFileName = "log..txt";
     private const string InstructionPrompt = """
-        NOTE: follow the below instructions when generating responses that include Azure CLI commands with placeholders:
-        1. User's OS is `{0}`. Make sure the generated commands are suitable for the specified OS.
-        2. DO NOT include the command for creating a new resource group unless the query explicitly asks for it. Otherwise, assume a resource group already exists.
-        3. DO NOT include an additional example with made-up values unless it provides additional context or value beyond the initial command.
-        4. DO NOT use the line continuation operator (backslash `\` in Bash) in the generated commands.
+        NOTE: Follow the instructions below when generating Azure CLI or Azure PowerShell commands with placeholders:
+        1. The targeting OS is '{0}'.
+        2. Always assume the user has logged in Azure and a resource group already exists.
+        3. DO NOT include any additional examples with made-up values.
+        4. DO NOT use the line continuation operator (backslash `\`) in commands.
         5. Always represent a placeholder in the form of `<placeholder-name>` and enclose it within double quotes.
         6. Always use the consistent placeholder names across all your responses. For example, `<resourceGroupName>` should be used for all the places where a resource group name value is needed.
         7. When the commands contain placeholders, the placeholders should be summarized in markdown bullet points at the end of the response in the same order as they appear in the commands, following this format:
@@ -56,7 +57,7 @@ public sealed class AzureAgent : ILLMAgent
 
         _chatSession = new ChatSession(_httpClient);
         _valueStore = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        _instructions = string.Format(InstructionPrompt, Environment.OSVersion.VersionString);
+        _instructions = string.Format(InstructionPrompt, RuntimeInformation.OSDescription);
 
         Name = "azure";
         Company = "Microsoft";
@@ -326,6 +327,7 @@ public sealed class AzureAgent : ILLMAgent
                 }
             }
 
+            Log.Debug("[AzureAgent] TopicName: {0}", _copilotResponse.TopicName);
             Telemetry.Trace(AzTrace.Chat(_copilotResponse));
         }
         catch (Exception ex)
@@ -417,7 +419,7 @@ public sealed class AzureAgent : ILLMAgent
         //  - `<second-placeholder>`: <concise-description>
         const string pattern = "- `{0}`:";
         int index = text.IndexOf(string.Format(pattern, first), begin);
-        if (index > 0 && text[index - 1] is '\n' && text[index - 2] is ':')
+        if (index > 0 && IsInPlaceholderSection(text, index))
         {
             // Get the start index of the placeholder section.
             int n = index - 2;
@@ -453,6 +455,26 @@ public sealed class AzureAgent : ILLMAgent
 
         ReplaceKnownPlaceholders(data);
         return data;
+
+        static bool IsInPlaceholderSection(string text, int index)
+        {
+            // This section should immediately follow "Placeholders:" on the next line.
+            // The "- `<xxx>`" part mostly starts at the beginning of the new line, but
+            // sometimes starts after a few space characters.
+            int firstNonSpaceCharBackward = -1;
+            for (int i = index - 1; i >= 0; i--)
+            {
+                if (text[i] is not ' ')
+                {
+                    firstNonSpaceCharBackward = i;
+                    break;
+                }
+            }
+
+            return firstNonSpaceCharBackward > 0
+                && text[firstNonSpaceCharBackward] is '\n'
+                && text[firstNonSpaceCharBackward - 1] is ':';
+        }
     }
 
     internal void ResetArgumentPlaceholder()

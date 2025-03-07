@@ -36,7 +36,7 @@ internal class ChatSession : IDisposable
         _flights = new Dictionary<string, object>()
         {
             ["openAIModel"] = "gpt4optum",
-            ["openAIEndpointName"] = "norwayeast,australiaeast,swedencentral",
+            ["openAIEndpointName"] = "australiaeast,norwayeast",
             ["docsHandlerEndpoint"] = "learnDocs",
             ["unifiedcopilotdebug"] = false,
             ["unifiedcopilottest"] = false,
@@ -52,11 +52,10 @@ internal class ChatSession : IDisposable
             ["copilotmanageability"] = true,
             ["gpt4tcsprompt"] = true,
             ["copilotmanageabilityuimenu"] = true,
-            ["usenewchatinputcomponent"] = true, // not sure what this is for
             ["getformstate"] = true,
-            ["notificationcopilotbuttonallerror"] = false,
             ["chitchatprompt"] = true,
             ["azurepluginstore"] = true,
+            ["pipelineorchestration"] = true,
             // TODO: the streaming is slow and not sending chunks, very clumsy for now.
             // ["streamresponse"] = true,
         };
@@ -315,7 +314,10 @@ internal class ChatSession : IDisposable
 
                 if (activity.IsTyping)
                 {
-                    context?.Status(activity.Text);
+                    if (activity.TopicName is CopilotActivity.ProgressTopic)
+                    {
+                        context?.Status(activity.Text);
+                    }
                     continue;
                 }
 

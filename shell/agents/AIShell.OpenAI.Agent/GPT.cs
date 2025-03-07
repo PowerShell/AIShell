@@ -12,6 +12,12 @@ internal enum EndpointType
     CompatibleThirdParty,
 }
 
+public enum AuthType
+{
+    ApiKey,
+    EntraID
+}
+
 public class GPT
 {
     internal EndpointType Type { get; }
@@ -26,6 +32,10 @@ public class GPT
 
     [JsonConverter(typeof(SecureStringJsonConverter))]
     public SecureString Key { set; get; }
+
+    [JsonConverter(typeof(JsonStringEnumConverter<AuthType>))]
+    public AuthType AuthType { set; get; } = AuthType.ApiKey;
+
     public string SystemPrompt { set; get; }
 
     public GPT(
@@ -75,7 +85,7 @@ public class GPT
     /// <returns></returns>
     internal async Task<bool> SelfCheck(IHost host, CancellationToken token)
     {
-        if (Key is not null && ModelInfo is not null)
+        if ((AuthType == AuthType.EntraID || Key is not null) && ModelInfo is not null)
         {
             return true;
         }
@@ -91,7 +101,7 @@ public class GPT
                 await AskForModel(host, token);
             }
 
-            if (Key is null)
+            if (AuthType == AuthType.ApiKey && Key is null)
             {
                 await AskForKeyAsync(host, token);
             }

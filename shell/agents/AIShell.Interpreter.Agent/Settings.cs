@@ -12,6 +12,12 @@ internal enum EndpointType
     OpenAI,
 }
 
+public enum AuthType
+{
+    ApiKey,
+    EntraID
+}
+
 internal class Settings
 {
     internal EndpointType Type { get; }
@@ -22,6 +28,8 @@ internal class Settings
     public string Deployment { set; get; }
     public string ModelName { set; get; }
     public SecureString Key { set; get; }
+
+    public AuthType AuthType { set; get; } = AuthType.ApiKey;
 
     public bool AutoExecution { set; get; }
     public bool DisplayErrors { set; get; }
@@ -36,6 +44,7 @@ internal class Settings
         AutoExecution = configData.AutoExecution ?? false;
         DisplayErrors = configData.DisplayErrors ?? true;
         Key = configData.Key;
+        AuthType = configData.AuthType;
 
         Dirty = false;
         ModelInfo = ModelInfo.TryResolve(ModelName, out var model) ? model : null;
@@ -76,7 +85,7 @@ internal class Settings
                 await AskForModel(host, token);
             }
 
-            if (Key is null)
+            if (AuthType == AuthType.ApiKey && Key is null)
             {
                 await AskForKeyAsync(host, token);
             }
@@ -156,6 +165,7 @@ internal class Settings
             ModelName = this.ModelName,
             AutoExecution = this.AutoExecution,
             DisplayErrors = this.DisplayErrors,
+            AuthType = this.AuthType,
             Key = this.Key,
         };
     }
@@ -166,6 +176,7 @@ internal class ConfigData
     public string Endpoint { set; get; }
     public string Deployment { set; get; }
     public string ModelName { set; get; }
+    public AuthType AuthType { set; get; } = AuthType.ApiKey;
     public bool? AutoExecution { set; get; }
     public bool? DisplayErrors { set; get; }
 

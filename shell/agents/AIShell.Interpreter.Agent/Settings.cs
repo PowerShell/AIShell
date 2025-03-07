@@ -56,6 +56,12 @@ internal class Settings
             : !noEndpoint && !noDeployment
                 ? EndpointType.AzureOpenAI
                 : throw new InvalidOperationException($"Invalid setting: {(noEndpoint ? "Endpoint" : "Deployment")} key is missing. To use Azure OpenAI service, please specify both the 'Endpoint' and 'Deployment' keys. To use OpenAI service, please ignore both keys.");
+
+        // EntraID authentication is only supported for Azure OpenAI
+        if (AuthType == AuthType.EntraID && Type != EndpointType.AzureOpenAI)
+        {
+            throw new InvalidOperationException("EntraID authentication is only supported for Azure OpenAI service.");
+        }
     }
 
     internal void MarkClean()
@@ -69,7 +75,7 @@ internal class Settings
     /// <returns></returns>
     internal async Task<bool> SelfCheck(IHost host, CancellationToken token)
     {
-        if (Key is not null && ModelInfo is not null)
+        if ((AuthType == AuthType.ApiKey && Key is not null || AuthType == AuthType.EntraID) && ModelInfo is not null)
         {
             return true;
         }
@@ -110,12 +116,14 @@ internal class Settings
                     new(label: "  Endpoint", m => m.Endpoint),
                     new(label: "  Deployment", m => m.Deployment),
                     new(label: "  Model", m => m.ModelName),
+                    new(label: "  Auth Type", m => m.AuthType.ToString()),
                 ],
 
             EndpointType.OpenAI =>
                 [
                     new(label: "  Type", m => m.Type.ToString()),
                     new(label: "  Model", m => m.ModelName),
+                    new(label: "  Auth Type", m => m.AuthType.ToString()),
                 ],
 
             _ => throw new UnreachableException(),

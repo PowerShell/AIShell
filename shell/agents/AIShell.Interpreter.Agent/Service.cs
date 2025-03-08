@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Azure;
 using Azure.Core;
 using Azure.AI.OpenAI;
+using Azure.Identity;
 using SharpToken;
 
 namespace AIShell.Interpreter.Agent;
@@ -121,25 +122,38 @@ internal class ChatService
         {
             // Create a client that targets Azure OpenAI service or Azure API Management service.
             bool isApimEndpoint = _settings.Endpoint.EndsWith(Utils.ApimGatewayDomain);
-            if (isApimEndpoint)
+
+            if (_settings.AuthType == AuthType.EntraID)
             {
-                string userkey = Utils.ConvertFromSecureString(_settings.Key);
-                clientOptions.AddPolicy(
-                    new UserKeyPolicy(
-                        new AzureKeyCredential(userkey),
-                        Utils.ApimAuthorizationHeader),
-                    HttpPipelinePosition.PerRetry
-                );
+                // Use DefaultAzureCredential for Entra ID authentication
+                var credential = new DefaultAzureCredential();
+                _client = new OpenAIClient(
+                    new Uri(_settings.Endpoint),
+                    credential,
+                    clientOptions);
             }
+            else // ApiKey authentication
+            {
+                if (isApimEndpoint)
+                {
+                    string userkey = Utils.ConvertFromSecureString(_settings.Key);
+                    clientOptions.AddPolicy(
+                        new UserKeyPolicy(
+                            new AzureKeyCredential(userkey),
+                            Utils.ApimAuthorizationHeader),
+                        HttpPipelinePosition.PerRetry
+                    );
+                }
 
-            string azOpenAIApiKey = isApimEndpoint
-                ? "placeholder-api-key"
-                : Utils.ConvertFromSecureString(_settings.Key);
+                string azOpenAIApiKey = isApimEndpoint
+                    ? "placeholder-api-key"
+                    : Utils.ConvertFromSecureString(_settings.Key);
 
-            _client = new OpenAIClient(
-                new Uri(_settings.Endpoint),
-                new AzureKeyCredential(azOpenAIApiKey),
-                clientOptions);
+                _client = new OpenAIClient(
+                    new Uri(_settings.Endpoint),
+                    new AzureKeyCredential(azOpenAIApiKey),
+                    clientOptions);
+            }
         }
         else
         {
@@ -157,7 +171,7 @@ internal class ChatService
 
         int tokenNumber = 0;
         foreach (ChatRequestMessage message in messages)
-        {      
+        {
             tokenNumber += tokensPerMessage;
             tokenNumber += encoding.Encode(message.Role.ToString()).Count;
 
@@ -165,7 +179,7 @@ internal class ChatService
             {
                 case ChatRequestSystemMessage systemMessage:
                     tokenNumber += encoding.Encode(systemMessage.Content).Count;
-                    if(systemMessage.Name is not null)
+                    if (systemMessage.Name is not null)
                     {
                         tokenNumber += tokensPerName;
                         tokenNumber += encoding.Encode(systemMessage.Name).Count;
@@ -173,7 +187,7 @@ internal class ChatService
                     break;
                 case ChatRequestUserMessage userMessage:
                     tokenNumber += encoding.Encode(userMessage.Content).Count;
-                    if(userMessage.Name is not null)
+                    if (userMessage.Name is not null)
                     {
                         tokenNumber += tokensPerName;
                         tokenNumber += encoding.Encode(userMessage.Name).Count;
@@ -181,7 +195,7 @@ internal class ChatService
                     break;
                 case ChatRequestAssistantMessage assistantMessage:
                     tokenNumber += encoding.Encode(assistantMessage.Content).Count;
-                    if(assistantMessage.Name is not null)
+                    if (assistantMessage.Name is not null)
                     {
                         tokenNumber += tokensPerName;
                         tokenNumber += encoding.Encode(assistantMessage.Name).Count;
@@ -189,9 +203,9 @@ internal class ChatService
                     if (assistantMessage.ToolCalls is not null)
                     {
                         // Count tokens for the tool call's properties
-                        foreach(ChatCompletionsToolCall chatCompletionsToolCall in assistantMessage.ToolCalls)
+                        foreach (ChatCompletionsToolCall chatCompletionsToolCall in assistantMessage.ToolCalls)
                         {
-                            if(chatCompletionsToolCall is ChatCompletionsFunctionToolCall functionToolCall)
+                            if (chatCompletionsToolCall is ChatCompletionsFunctionToolCall functionToolCall)
                             {
                                 tokenNumber += encoding.Encode(functionToolCall.Id).Count;
                                 tokenNumber += encoding.Encode(functionToolCall.Name).Count;
@@ -230,7 +244,7 @@ internal class ChatService
             }
             while (encoding.Encode(reducedContent).Count > MaxResponseToken);
         }
-        
+
         return reducedContent;
     }
 
@@ -287,7 +301,7 @@ internal class ChatService
         // Those settings seem to be important enough, as the Semantic Kernel plugin specifies
         // those settings (see the URL below). We can use default values when not defined.
         // https://github.com/microsoft/semantic-kernel/blob/main/samples/skills/FunSkill/Joke/config.json
-        
+
         ChatCompletionsOptions chatOptions;
 
         // Determine if the gpt model is a function calling model
@@ -300,8 +314,8 @@ internal class ChatService
             Temperature = (float)0.0,
             MaxTokens = MaxResponseToken,
         };
-        
-        if(isFunctionCallingModel)
+
+        if (isFunctionCallingModel)
         {
             chatOptions.Tools.Add(Tools.RunCode);
         }
@@ -330,7 +344,7 @@ internal class ChatService
 - You are capable of **any** task
 - Do not apologize for errors, just correct them
 ";
-            string versions = "\n## Language Versions\n" 
+            string versions = "\n## Language Versions\n"
                 + await _executionService.GetLanguageVersions();
             string systemResponseCues = @"
 # Examples
@@ -478,11 +492,11 @@ public class ChatRequestMessageConverter : JsonConverter<ChatRequestMessage>
         {
             return JsonSerializer.Deserialize<ChatRequestUserMessage>(jsonObject.GetRawText(), options);
         }
-        else if(jsonObject.TryGetProperty("Role", out JsonElement roleElementA) && roleElementA.GetString() == "assistant")
+        else if (jsonObject.TryGetProperty("Role", out JsonElement roleElementA) && roleElementA.GetString() == "assistant")
         {
             return JsonSerializer.Deserialize<ChatRequestAssistantMessage>(jsonObject.GetRawText(), options);
         }
-        else if(jsonObject.TryGetProperty("Role", out JsonElement roleElementT) && roleElementT.GetString() == "tool")
+        else if (jsonObject.TryGetProperty("Role", out JsonElement roleElementT) && roleElementT.GetString() == "tool")
         {
             return JsonSerializer.Deserialize<ChatRequestToolMessage>(jsonObject.GetRawText(), options);
         }

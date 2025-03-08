@@ -236,7 +236,7 @@ public sealed class InterpreterAgent : ILLMAgent
 
     private void NewExampleSettingFile()
     {
-        string SampleContent = """
+        string sample = $$"""
         {
           // To use the Azure OpenAI service:
           // - Set `Endpoint` to the endpoint of your Azure OpenAI service,
@@ -249,22 +249,37 @@ public sealed class InterpreterAgent : ILLMAgent
           "Deployment": "",
           "ModelName": "",
           "Key": "",
+          "AuthType": "ApiKey",
           "AutoExecution": false, // 'true' to allow the agent run code automatically; 'false' to always prompt before running code.
           "DisplayErrors": true   // 'true' to display the errors when running code; 'false' to hide the errors to be less verbose.
+
+          // To use Azure OpenAI service with Entra ID authentication:
+          // - Set `Endpoint` to the endpoint of your Azure OpenAI service.
+          // - Set `Deployment` to the deployment name of your Azure OpenAI service.
+          // - Set `ModelName` to the name of the model used for your deployment.
+          // - Set `AuthType` to "EntraID" to use Azure AD credentials.
+          /*
+          "Endpoint": "<insert your Azure OpenAI endpoint>",
+          "Deployment": "<insert your deployment name>",
+          "ModelName": "<insert the model name>",
+          "AuthType": "EntraID",
+          "AutoExecution": false,
+          "DisplayErrors": true
+          */
 
           // To use the public OpenAI service:
           // - Ignore the `Endpoint` and `Deployment` keys.
           // - Set `ModelName` to the name of the model to be used. e.g. "gpt-4o".
           // - Set `Key` to be the OpenAI access token.
-          // Replace the above with the following:
           /*
-          "ModelName": "",
-          "Key": "",
+          "ModelName": "<insert the model name>",
+          "Key": "<insert your key>",
+          "AuthType": "ApiKey",
           "AutoExecution": false,
           "DisplayErrors": true
           */
         }
         """;
-        File.WriteAllText(SettingFile, SampleContent, Encoding.UTF8);
+        File.WriteAllText(SettingFile, sample);
     }
 }

@@ -250,9 +250,9 @@ public sealed partial class OllamaAgent : ILLMAgent
         catch (HttpRequestException e)
         {
             host.WriteErrorLine($"{e.Message}");
-            host.WriteErrorLine($"Ollama active model:    \"{activeModel.Name}\"");
-            host.WriteErrorLine($"Ollama endpoint: \"{_settings.Endpoint}\"");
-            host.WriteErrorLine($"Ollama settings: \"{SettingFile}\"");
+            host.WriteErrorLine($"Ollama active model: \"{activeModel.Name}\"");
+            host.WriteErrorLine($"Ollama endpoint:     \"{_settings.Endpoint}\"");
+            host.WriteErrorLine($"Ollama settings:     \"{SettingFile}\"");
         }
         finally
         {

@@ -108,7 +108,7 @@ public class GPT
                 await AskForModel(host, token);
             }
 
-            if (AuthType == AuthType.ApiKey && Key is null)
+            if (AuthType is AuthType.ApiKey && Key is null)
             {
                 await AskForKeyAsync(host, token);
             }

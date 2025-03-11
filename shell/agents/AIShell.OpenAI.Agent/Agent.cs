@@ -323,7 +323,7 @@ public sealed class OpenAIAgent : ILLMAgent
                 "Deployment": "<insert your deployment name>",
                 "ModelName": "gpt-4o",
                 "AuthType": "EntraID",
-                "SystemPrompt": "1. You are a helpful and friendly assistant with expertise in PowerShell scripting and command line."
+                "SystemPrompt": "You are a helpful and friendly assistant with expertise in PowerShell scripting and command line."
               }
               */
           ],

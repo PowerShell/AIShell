@@ -75,7 +75,7 @@ internal class Settings
     /// <returns></returns>
     internal async Task<bool> SelfCheck(IHost host, CancellationToken token)
     {
-        if ((AuthType == AuthType.ApiKey && Key is not null || AuthType == AuthType.EntraID) && ModelInfo is not null)
+        if ((AuthType is AuthType.EntraID || Key is not null) && ModelInfo is not null)
         {
             return true;
         }

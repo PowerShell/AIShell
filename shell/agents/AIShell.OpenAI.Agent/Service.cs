@@ -119,7 +119,7 @@ internal class ChatService
             && string.Equals(old.Deployment, _gptToUse.Deployment)
             && string.Equals(old.ModelName, _gptToUse.ModelName)
             && old.AuthType == _gptToUse.AuthType
-            && (old.AuthType == AuthType.EntraID || old.Key.IsEqualTo(_gptToUse.Key)))
+            && (old.AuthType is AuthType.EntraID || old.Key.IsEqualTo(_gptToUse.Key)))
         {
             // It's the same endpoint and auth type, so we reuse the existing client.
             return;
@@ -133,7 +133,7 @@ internal class ChatService
             var clientOptions = new AzureOpenAIClientOptions() { RetryPolicy = new ChatRetryPolicy() };
             bool isApimEndpoint = _gptToUse.Endpoint.EndsWith(Utils.ApimGatewayDomain);
 
-            if (_gptToUse.AuthType == AuthType.ApiKey)
+            if (_gptToUse.AuthType is AuthType.ApiKey)
             {
                 string userKey = Utils.ConvertFromSecureString(_gptToUse.Key);
 
@@ -155,7 +155,7 @@ internal class ChatService
 
                 _client = aiClient.GetChatClient(_gptToUse.Deployment);
             }
-            else if (_gptToUse.AuthType == AuthType.EntraID)
+            else
             {
                 var credential = new DefaultAzureCredential();
 

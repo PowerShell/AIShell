@@ -125,7 +125,7 @@ internal class Settings
                 new PropertyElement<GPT>(nameof(GPT.Name)),
                 new CustomElement<GPT>(label: "Active", m => m.Name == Active?.Name ? "true" : string.Empty),
                 new PropertyElement<GPT>(nameof(GPT.Description)),
-                            ]);
+            ]);
     }
 
     internal void ShowOneGPT(IHost host, string name)

@@ -256,16 +256,15 @@ internal sealed class ModelCommand : CommandBase
 
         try
         {
-            OllamaModel chosenModel = string.IsNullOrEmpty(name)
+            string chosenModel = string.IsNullOrEmpty(name)
                 ? host.PromptForSelectionAsync(
                     title: "[orange1]Please select a [Blue]Model[/] to use[/]:",
                     choices: setting.GetAllModels().GetAwaiter().GetResult(),
-                    converter: ModelName,
                     CancellationToken.None).GetAwaiter().GetResult()
                 : setting.GetModelByName(name).GetAwaiter().GetResult();
 
-            setting.UseModel(chosenModel);
-            host.MarkupLine($"Using the model [green]{chosenModel.Name}[/]:");
+            setting.UseModel(chosenModel).GetAwaiter().GetResult();
+            host.MarkupLine($"Using the model [green]{chosenModel}[/]:");
         }
         catch (InvalidOperationException ex)
         {
@@ -274,7 +273,6 @@ internal sealed class ModelCommand : CommandBase
         }
     }
 
-    private static string ModelName(OllamaModel model) => model.Name;
-    private IEnumerable<string> ModelNameCompleter(CompletionContext context) => _agnet.Settings?.GetAllModels().GetAwaiter().GetResult().Select(ModelName) ?? [];
+    private IEnumerable<string> ModelNameCompleter(CompletionContext context) => _agnet.Settings?.GetAllModels().GetAwaiter().GetResult() ?? [];
     private string ModelNamesAsString() => string.Join(", ", ModelNameCompleter(null));
 }

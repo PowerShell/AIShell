@@ -176,11 +176,11 @@ public sealed partial class OllamaAgent : ILLMAgent
             return false;
         }
 
-        var activeModel = await _settings.GetActiveModel().ConfigureAwait(false);
+        var activeModel = await _settings.GetActiveModel(host).ConfigureAwait(false);
 
         // Prepare request
         _request.Prompt = input;
-        _request.Model = activeModel.Name;
+        _request.Model = activeModel;
         _request.Stream = _settings.Stream;
 
         if (!string.IsNullOrWhiteSpace(_settings.RunningConfig.SystemPrompt))
@@ -250,7 +250,7 @@ public sealed partial class OllamaAgent : ILLMAgent
         catch (HttpRequestException e)
         {
             host.WriteErrorLine($"{e.Message}");
-            host.WriteErrorLine($"Ollama active model: \"{activeModel.Name}\"");
+            host.WriteErrorLine($"Ollama active model: \"{activeModel}\"");
             host.WriteErrorLine($"Ollama endpoint:     \"{_settings.Endpoint}\"");
             host.WriteErrorLine($"Ollama settings:     \"{SettingFile}\"");
         }
@@ -341,7 +341,7 @@ public sealed partial class OllamaAgent : ILLMAgent
             // Enable Ollama streaming
             "Stream": false,
             // Specify the default model to use
-            "DefaultConfig": "PowerShell Expert",
+            "DefaultConfig": "PowerShell Expert"
         }
         """;
         File.WriteAllText(SettingFile, SampleContent, Encoding.UTF8);

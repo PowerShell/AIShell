@@ -1,165 +1,141 @@
-﻿using System.Collections.Generic;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Linq;
 using AIShell.Abstraction;
 using OllamaSharp;
-using OllamaSharp.Models;
 
 namespace AIShell.Ollama.Agent;
 
 internal class Settings
 {
-    private OllamaModel _activeModel;
-    private ICollection<OllamaModel> _models = [];
     private bool _initialized = false;
-
-    public ICollection<ModelConfig> Configs { get; }
+    private List<string> AvailableModels { get; set; } = [];
+    public List<ModelConfig> Configs { get; }
     public string Endpoint { get; }
     public bool Stream { get; }
-    public RunningConfig RunningConfig { get; private set; }
+    public ModelConfig RunningConfig { get; private set; }
 
     public Settings(ConfigData configData)
     {
         if (string.IsNullOrWhiteSpace(configData.Endpoint))
         {
-            throw new ArgumentException("\"Endpoint\" key is missing.");
+            throw new InvalidOperationException("'Endpoint' key is missing in configuration.");
         }
 
-        Configs = configData.Configs;
+        Configs = configData.Configs ?? [];
         Endpoint = configData.Endpoint;
         Stream = configData.Stream;
 
-        RunningConfig = new RunningConfig();
-
-        if (Configs is not null)
+        // Ensure the default configuration is available in the list of configurations.
+        if (!string.IsNullOrEmpty(configData.DefaultConfig) &&
+                !Configs.Any(c => c.Name == configData.DefaultConfig))
         {
-            var modelConfig = Configs.FirstOrDefault(c => c.Name == configData.DefaultConfig);
-            if (modelConfig is not null)
-            {
-                RunningConfig = modelConfig.ToRunnigConfig();
-            }
+            throw new InvalidOperationException($"The selected default configuration '{configData.DefaultConfig}' doesn't exist.");
         }
+
+        RunningConfig = (Configs, configData.DefaultConfig) switch
+        {
+            (not [], "") => Configs.First() with { }, /* No default config - use the first one defined in Configs */
+            (not [], _) => Configs.First(c => c.Name == configData.DefaultConfig) with { }, /* Use the default config */
+            _ => new ModelConfig(nameof(RunningConfig), "") /* No config available - use empty */
+        };
     }
 
     private async Task EnsureModelsInitialized(CancellationToken cancellationToken = default)
     {
-        if (!_initialized)
+        if (_initialized)
+        { 
+            return;
+        }
+
+        OllamaApiClient _client = null;
+        try
         {
-            OllamaApiClient _client = null;
-            try
+            _client = new OllamaApiClient(Endpoint);
+            var models = await _client.ListLocalModelsAsync(cancellationToken).ConfigureAwait(false);
+            AvailableModels = [.. models.Select(m => m.Name)];
+
+            if (AvailableModels.Count == 0)
             {
-                _client = new OllamaApiClient(this.Endpoint);
-                var models = await _client.ListLocalModelsAsync(cancellationToken).ConfigureAwait(false);
-                this._models = models.Select(m => new OllamaModel(Name: m.Name)).ToList().AsReadOnly();
-
-                if (this._models.Count == 0)
-                {
-                    throw new InvalidOperationException("No model is available.");
-                }
-
-                if (string.IsNullOrEmpty(this.RunningConfig.ModelName))
-                {
-                    // Active GPT not specified, but there is only one GPT defined, then use it by default.
-                    _activeModel = _models.First();
-                }
-                else
-                {
-                    _activeModel = _models.FirstOrDefault(m => m.Name == this.RunningConfig.ModelName);
-                    if (_activeModel == null)
-                    {
-                        string message = $"The Model '{this.RunningConfig.ModelName}' specified as \"Default\" in the configuration doesn't exist.";
-                        throw new InvalidOperationException(message);
-                    }
-                }
-                _initialized = true;
+                throw new InvalidOperationException($"No models are available to use from '{Endpoint}'.");
             }
-            finally
+            _initialized = true;
+        }
+        finally
+        {
+            if (_client is IDisposable disposable)
             {
-                if (_client is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
+                disposable.Dispose();
             }
         }
     }
 
-    internal async Task<ICollection<OllamaModel>> GetAllModels(CancellationToken cancellationToken = default)
+    internal async Task<ICollection<string>> GetAllModels(CancellationToken cancellationToken = default)
     {
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        return this._models;
+        return AvailableModels;
     }
 
-    internal async Task<OllamaModel> GetModelByName(string name, CancellationToken cancellationToken = default)
+    internal async Task<string> GetModelByName(string name, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        var model = _models.FirstOrDefault(m => m.Name == name);
-
-        if (model is not null)
+        if (!AvailableModels.Contains(name))
         {
-            return model;
+            throw new InvalidOperationException($"A model with the name '{name}' doesn't exist in the list of available models.");
         }
 
-        throw new InvalidOperationException($"A model with the name '{name}' doesn't exist.");
+        return name;
     }
 
+    private static List<IRenderElement<string>> GetSystemPromptRenderElements() => [ new CustomElement<string>(label: "System prompt", s => s) ];
 
-    internal async Task UseModel(string name, CancellationToken cancellationToken = default)
-    {
-        await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        _activeModel = await GetModelByName(name, cancellationToken);
-    }
-
-    internal void UseModel(OllamaModel model)
-    {
-        _activeModel = model;
-    }
-
-    internal void ShowSystemPrompt(IHost host)
-    {
-        host.RenderList(
-            RunningConfig.SystemPrompt,
-            [
-                new CustomElement<string>(label: "System prompt is", str => str)
-            ]);
-    }
+    internal void ShowSystemPrompt(IHost host) => host.RenderList(RunningConfig.SystemPrompt, GetSystemPromptRenderElements());
 
     internal void SetSystemPrompt(IHost host, string prompt)
     {   
-        this.RunningConfig = this.RunningConfig with { SystemPrompt = prompt ?? string.Empty };
-        host.RenderList(
-            this.RunningConfig.SystemPrompt,
-            [
-                new CustomElement<string>(label: "New system prompt is", str => str)
-            ]);
+        RunningConfig = RunningConfig with { SystemPrompt = prompt ?? string.Empty };
+        host.RenderList(RunningConfig.SystemPrompt, GetSystemPromptRenderElements());
     }
+    
+    private static List<IRenderElement<string>> GetRenderModelElements(string currentModelName) => [
+        new CustomElement<string>(label: "Model Name", m => m),
+        new CustomElement<string>(label: "Active", m => m == currentModelName ? "true" : string.Empty)
+    ];
+
+    internal async Task UseModel(string name, CancellationToken cancellationToken = default) =>
+        RunningConfig = RunningConfig with { ModelName = await GetModelByName(name, cancellationToken).ConfigureAwait(false) };
 
     internal async Task ListAllModels(IHost host, CancellationToken cancellationToken = default)
     {
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        host.RenderTable(
-            [.. _models],
-            [
-                new PropertyElement<OllamaModel>(nameof(OllamaModel.Name)),
-                new CustomElement<OllamaModel>(label: "Active", m => m.Name == _activeModel?.Name ? "true" : string.Empty)
-            ]);
+        host.RenderTable(AvailableModels, GetRenderModelElements(RunningConfig.ModelName));
     }
 
     internal async Task ShowOneModel(IHost host, string name, CancellationToken cancellationToken = default)
     {
         var model = await GetModelByName(name, cancellationToken).ConfigureAwait(false);
-        host.RenderList(
-            model,
+        host.RenderList(model, GetRenderModelElements(RunningConfig.ModelName));
+    }
+
+    internal async Task UseConfg(ModelConfig config, CancellationToken cancellationToken = default)
+    {
+        RunningConfig = config with { };
+        await UseModel(RunningConfig.ModelName, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal void ListAllConfigs(IHost host)
+    {
+        host.RenderTable(
+            Configs,
             [
-                new PropertyElement<OllamaModel>(nameof(OllamaModel.Name)),
-                new CustomElement<OllamaModel>(label: "Active", m => m.Name == _activeModel?.Name ? "true" : string.Empty)
+                new PropertyElement<ModelConfig>(nameof(ModelConfig.Name)),
+                new CustomElement<ModelConfig>(label: "Active", m => m == RunningConfig  ? "true" : string.Empty)
             ]);
     }
 
-    internal void ShowOneConfig(IHost host, string name, CancellationToken cancellationToken = default)
+    internal void ShowOneConfig(IHost host, string name)
     {
-        var config = this.Configs.FirstOrDefault(c => c.Name == name);
+        var config = Configs.FirstOrDefault(c => c.Name == name);
         host.RenderList(
             config,
             [
@@ -167,54 +143,50 @@ internal class Settings
                 new PropertyElement<ModelConfig>(nameof(ModelConfig.Description)),
                 new PropertyElement<ModelConfig>(nameof(ModelConfig.ModelName)),
                 new PropertyElement<ModelConfig>(nameof(ModelConfig.SystemPrompt)),
-                new CustomElement<ModelConfig>(label: "Active", m => m.ToRunnigConfig() == this.RunningConfig ? "true" : string.Empty),
+                new CustomElement<ModelConfig>(label: "Active", m => m == RunningConfig ? "true" : string.Empty),
             ]);
     }
 
-    internal async Task UseConfg(IHost host, ModelConfig config, CancellationToken cancellationToken = default)
-    {
-        this.RunningConfig = config.ToRunnigConfig();
-        await UseModel(this.RunningConfig.ModelName, cancellationToken).ConfigureAwait(false);
-    }
-
-    internal void ListAllConfigs(IHost host)
-    {
-        host.RenderTable(
-            [.. this.Configs],
-            [
-                new PropertyElement<ModelConfig>(nameof(ModelConfig.Name)),
-                new CustomElement<ModelConfig>(label: "Active", m => m.ToRunnigConfig() == this.RunningConfig  ? "true" : string.Empty)
-            ]);
-    }
-
-    internal async Task<OllamaModel> GetActiveModel(CancellationToken cancellationToken = default)
+    internal async Task<string> GetActiveModel(IHost host, CancellationToken cancellationToken = default)
     {
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        return _activeModel;
-    }    
-}
-
-internal record OllamaModel(string Name);
-
-internal record ModelConfig(string Name, string SystemPrompt, string ModelName, string Description, bool ResetContext);
-
-internal record ConfigData(List<ModelConfig> Configs, string Endpoint, bool Stream, string DefaultConfig);
-
-internal record RunningConfig(string Name = "", string ModelName = "", string SystemPrompt = "", bool ResetContext = false);
-
-static class ModelConfigExtensions
-{
-    public static RunningConfig ToRunnigConfig(this ModelConfig config)
-    {
-        return new RunningConfig()
+        if (string.IsNullOrEmpty(RunningConfig.ModelName))
         {
-            Name = config.Name,
-            ModelName = config.ModelName,
-            SystemPrompt = config.SystemPrompt,
-            ResetContext = config.ResetContext
-        };
+            // There is no model set, so use the first one available.
+            RunningConfig = RunningConfig with { ModelName = AvailableModels.First() };
+            host.MarkupLine($"No Ollama model is configured. Using the first available model [green]'{RunningConfig.ModelName}'.");
+        }
+        else
+        {
+            if (!AvailableModels.Contains(RunningConfig.ModelName))
+            {
+                throw new InvalidOperationException($"The configured Ollama model '{RunningConfig.ModelName}' doesn't exist in the list of available models.");
+            }
+        }
+
+        return RunningConfig.ModelName;
     }
 }
+
+/// <summary>
+/// Represents a configuration for an Ollama model.
+/// </summary>
+/// <param name="Name">Required. The unique identifier name for this configuration.</param>
+/// <param name="ModelName">Required. The name of the Ollama model to be used.</param>
+/// <param name="SystemPrompt">Optional. The system prompt to be used with this model configuration.</param>
+/// <param name="Description">Optional. A human-readable description of this configuration.</param>
+/// <param name="ResetContext">Optional. Indicates whether the context should be reset when switching to this configuration. Defaults to <c>false</c>.</param>
+
+internal record ModelConfig(string Name, string ModelName, string SystemPrompt = "", string Description = "", bool ResetContext = false);
+
+/// <summary>
+/// Represents the configuration data for the AI Shell Ollama Agent.
+/// </summary>
+/// <param name="Configs">Optional. A list of predefined model configurations.</param>
+/// <param name="Endpoint">Required. The endpoint URL for the agent.</param>
+/// <param name="Stream">Optional. Indicates whether streaming is enabled. Defaults to <c>false</c>.</param>
+/// <param name="DefaultConfig">Optional. Specifies the default configuration name. If not provided, the first available config will be used.</param>
+internal record ConfigData(List<ModelConfig> Configs, string Endpoint, bool Stream = false, string DefaultConfig = "");
 
 /// <summary>
 /// Use source generation to serialize and deserialize the setting file.

@@ -48,7 +48,7 @@ public class PowerShell : ILanguage
                             }),
 
                     new LanguageRule(
-                        @"'[^\n]*?(?<!\\)'",
+                        @"'[^\n]*?'",
                         new Dictionary<int, string>
                             {
                                 {0, ScopeName.String}
@@ -62,7 +62,7 @@ public class PowerShell : ILanguage
                             }),
 
                     new LanguageRule(
-                        @"(?s)(""[^\n]*?(?<!`)"")",
+                        @"""[^\n]*?(?<!`)""",
                         new Dictionary<int, string>
                             {
                                 {0, ScopeName.String}

@@ -84,7 +84,7 @@ public sealed class OpenAIAgent : ILLMAgent
     public bool CanAcceptFeedback(UserAction action) => false;
 
     /// <inheritdoc/>
-    public void OnUserAction(UserActionPayload actionPayload) {}
+    public void OnUserAction(UserActionPayload actionPayload) { }
 
     /// <inheritdoc/>
     public Task RefreshChatAsync(IShell shell, bool force)
@@ -308,6 +308,22 @@ public sealed class OpenAIAgent : ILLMAgent
                 "ModelName": "gpt-4o",
                 "Key": "<insert your key>",
                 "SystemPrompt": "1. You are a helpful and friendly assistant with expertise in PowerShell scripting and command line.\n2. Assume user is using the operating system `Windows 11` unless otherwise specified.\n3. Use the `code block` syntax in markdown to encapsulate any part in responses that is code, YAML, JSON or XML, but not table.\n4. When encapsulating command line code, use '```powershell' if it's PowerShell command; use '```sh' if it's non-PowerShell CLI command.\n5. When generating CLI commands, never ever break a command into multiple lines. Instead, always list all parameters and arguments of the command on the same line.\n6. Please keep the response concise but to the point. Do not overexplain."
+              },
+
+              // To use Azure OpenAI service with Entra ID authentication:
+              // - Set `Endpoint` to the endpoint of your Azure OpenAI service.
+              // - Set `Deployment` to the deployment name of your Azure OpenAI service.
+              // - Set `ModelName` to the name of the model used for your deployment, e.g. "gpt-4o".
+              // - Set `AuthType` to "EntraID" to use Azure AD credentials.
+              // For example:
+              {
+                "Name": "ps-az-entraId",
+                "Description": "A GPT instance with expertise in PowerShell scripting using Entra ID authentication.",
+                "Endpoint": "<insert your Azure OpenAI endpoint>",
+                "Deployment": "<insert your deployment name>",
+                "ModelName": "gpt-4o",
+                "AuthType": "EntraID",
+                "SystemPrompt": "You are a helpful and friendly assistant with expertise in PowerShell scripting and command line."
               }
               */
           ],

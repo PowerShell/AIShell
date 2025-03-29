@@ -1,6 +1,8 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using Azure.AI.OpenAI;
+using Azure.Core;
+using Azure.Identity;
 using Microsoft.ML.Tokenizers;
 using OpenAI;
 using OpenAI.Chat;
@@ -33,8 +35,8 @@ internal class ChatService
 
         _chatOptions = new ChatCompletionOptions()
         {
-           Temperature = 0,
-           MaxOutputTokenCount = MaxResponseToken,
+            Temperature = 0,
+            MaxOutputTokenCount = MaxResponseToken,
         };
     }
 
@@ -116,14 +118,14 @@ internal class ChatService
             && string.Equals(old.Endpoint, _gptToUse.Endpoint)
             && string.Equals(old.Deployment, _gptToUse.Deployment)
             && string.Equals(old.ModelName, _gptToUse.ModelName)
-            && old.Key.IsEqualTo(_gptToUse.Key))
+            && old.AuthType == _gptToUse.AuthType
+            && (old.AuthType is AuthType.EntraID || old.Key.IsEqualTo(_gptToUse.Key)))
         {
-            // It's the same same endpoint, so we reuse the existing client.
+            // It's the same endpoint and auth type, so we reuse the existing client.
             return;
         }
 
         EndpointType type = _gptToUse.Type;
-        string userKey = Utils.ConvertFromSecureString(_gptToUse.Key);
 
         if (type is EndpointType.AzureOpenAI)
         {
@@ -131,23 +133,39 @@ internal class ChatService
             var clientOptions = new AzureOpenAIClientOptions() { RetryPolicy = new ChatRetryPolicy() };
             bool isApimEndpoint = _gptToUse.Endpoint.EndsWith(Utils.ApimGatewayDomain);
 
-            if (isApimEndpoint)
+            if (_gptToUse.AuthType is AuthType.ApiKey)
             {
-                clientOptions.AddPolicy(
-                    ApiKeyAuthenticationPolicy.CreateHeaderApiKeyPolicy(
-                        new ApiKeyCredential(userKey),
-                        Utils.ApimAuthorizationHeader),
-                    PipelinePosition.PerTry);
+                string userKey = Utils.ConvertFromSecureString(_gptToUse.Key);
+
+                if (isApimEndpoint)
+                {
+                    clientOptions.AddPolicy(
+                        ApiKeyAuthenticationPolicy.CreateHeaderApiKeyPolicy(
+                            new ApiKeyCredential(userKey),
+                            Utils.ApimAuthorizationHeader),
+                        PipelinePosition.PerTry);
+                }
+
+                string azOpenAIApiKey = isApimEndpoint ? "placeholder-api-key" : userKey;
+
+                var aiClient = new AzureOpenAIClient(
+                    new Uri(_gptToUse.Endpoint),
+                    new ApiKeyCredential(azOpenAIApiKey),
+                    clientOptions);
+
+                _client = aiClient.GetChatClient(_gptToUse.Deployment);
             }
+            else
+            {
+                var credential = new DefaultAzureCredential();
 
-            string azOpenAIApiKey = isApimEndpoint ? "placeholder-api-key" : userKey;
+                var aiClient = new AzureOpenAIClient(
+                    new Uri(_gptToUse.Endpoint),
+                    credential,
+                    clientOptions);
 
-            var aiClient = new AzureOpenAIClient(
-                new Uri(_gptToUse.Endpoint),
-                new ApiKeyCredential(azOpenAIApiKey),
-                clientOptions);
-
-            _client = aiClient.GetChatClient(_gptToUse.Deployment);
+                _client = aiClient.GetChatClient(_gptToUse.Deployment);
+            }
         }
         else
         {
@@ -158,6 +176,7 @@ internal class ChatService
                 clientOptions.Endpoint = new(_gptToUse.Endpoint);
             }
 
+            string userKey = Utils.ConvertFromSecureString(_gptToUse.Key);
             var aiClient = new OpenAIClient(new ApiKeyCredential(userKey), clientOptions);
             _client = aiClient.GetChatClient(_gptToUse.ModelName);
         }

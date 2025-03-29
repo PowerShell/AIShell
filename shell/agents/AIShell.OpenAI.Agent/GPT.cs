@@ -12,6 +12,12 @@ internal enum EndpointType
     CompatibleThirdParty,
 }
 
+public enum AuthType
+{
+    ApiKey,
+    EntraID,
+}
+
 public class GPT
 {
     internal EndpointType Type { get; }
@@ -19,7 +25,7 @@ public class GPT
     internal ModelInfo ModelInfo { private set; get; }
 
     public string Name { set; get; }
-    public string Description { set; get; } 
+    public string Description { set; get; }
     public string Endpoint { set; get; }
     public string Deployment { set; get; }
     public string ModelName { set; get; }
@@ -28,6 +34,9 @@ public class GPT
     public SecureString Key { set; get; }
     public string SystemPrompt { set; get; }
 
+    [JsonConverter(typeof(JsonStringEnumConverter<AuthType>))]
+    public AuthType AuthType { set; get; }
+
     public GPT(
         string name,
         string description,
@@ -35,7 +44,8 @@ public class GPT
         string deployment,
         string modelName,
         string systemPrompt,
-        SecureString key)
+        SecureString key,
+        AuthType authType = AuthType.ApiKey)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentException.ThrowIfNullOrEmpty(description);
@@ -49,6 +59,7 @@ public class GPT
         ModelName = modelName.ToLowerInvariant();
         SystemPrompt = systemPrompt;
         Key = key;
+        AuthType = authType;
 
         Dirty = false;
         ModelInfo = ModelInfo.TryResolve(ModelName, out var model) ? model : null;
@@ -67,6 +78,12 @@ public class GPT
         {
             ModelInfo = ModelInfo.ThirdPartyModel;
         }
+
+        // EntraID authentication is only supported for Azure OpenAI
+        if (AuthType is AuthType.EntraID && Type is not EndpointType.AzureOpenAI)
+        {
+            throw new InvalidOperationException("EntraID authentication is only supported for Azure OpenAI service.");
+        }
     }
 
     /// <summary>
@@ -75,7 +92,7 @@ public class GPT
     /// <returns></returns>
     internal async Task<bool> SelfCheck(IHost host, CancellationToken token)
     {
-        if (Key is not null && ModelInfo is not null)
+        if ((AuthType is AuthType.EntraID || Key is not null) && ModelInfo is not null)
         {
             return true;
         }
@@ -91,7 +108,7 @@ public class GPT
                 await AskForModel(host, token);
             }
 
-            if (Key is null)
+            if (AuthType is AuthType.ApiKey && Key is null)
             {
                 await AskForKeyAsync(host, token);
             }
@@ -135,7 +152,7 @@ public class GPT
             .ConfigureAwait(false);
 
         Dirty = true;
-        Key = Utils.ConvertToSecureString(secret);      
+        Key = Utils.ConvertToSecureString(secret);
     }
 
     private void ShowEndpointInfo(IHost host)
@@ -148,12 +165,14 @@ public class GPT
                     new(label: "  Endpoint", m => m.Endpoint),
                     new(label: "  Deployment", m => m.Deployment),
                     new(label: "  Model", m => m.ModelName),
+                    new(label: "  AuthType", m => m.AuthType.ToString()),
                 },
 
             EndpointType.OpenAI =>
                 [
                     new(label: "  Type", m => m.Type.ToString()),
                     new(label: "  Model", m => m.ModelName),
+                    new(label: "  AuthType", m => m.AuthType.ToString()),
                 ],
 
             EndpointType.CompatibleThirdParty =>
@@ -161,6 +180,7 @@ public class GPT
                     new(label: "  Type", m => m.Type.ToString()),
                     new(label: "  Endpoint", m => m.Endpoint),
                     new(label: "  Model", m => m.ModelName),
+                    new(label: "  AuthType", m => m.AuthType.ToString()),
                 ],
 
             _ => throw new UnreachableException(),

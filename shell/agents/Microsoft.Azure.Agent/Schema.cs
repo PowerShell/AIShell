@@ -120,8 +120,9 @@ internal class CopilotActivity
 {
     public const string ConversationStateName = "azurecopilot/conversationstate";
     public const string SuggestedResponseName = "azurecopilot/suggesteduserresponses";
-    public const string CLIHandlerTopic = "generate_azure_cli_scripts";
-    public const string PSHandlerTopic = "generate_powershell_script";
+    public const string CLIHandlerTopic = "generate_azure_cli_scripts,Orchestrator_Respond";
+    public const string PSHandlerTopic = "generate_powershell_script,Orchestrator_Respond";
+    public const string ProgressTopic = "InProgressActivity";
 
     public string Type { get; set; }
     public string Id { get; set; }

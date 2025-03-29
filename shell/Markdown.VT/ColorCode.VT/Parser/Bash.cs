@@ -24,6 +24,20 @@ public class Bash : ILanguage
                     {1, BashCommentScope}
                 }),
 
+            new LanguageRule(
+                @"'[^\n]*?'",
+                new Dictionary<int, string>
+                {
+                    {0, ScopeName.String}
+                }),
+
+            new LanguageRule(
+                @"""[^\n]*?(?<!\\)""",
+                new Dictionary<int, string>
+                {
+                    {0, ScopeName.String}
+                }),
+
             // match the first word of a line in a multi-line string as the command name.
             new LanguageRule(
                 @"(?m)^\s*(\w+)",

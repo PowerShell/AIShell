@@ -885,6 +885,19 @@ internal class DataRetriever : IDisposable
                 command = metadata.Deserialize<AzCLICommand>(Utils.JsonOptions);
             }
         }
+        catch (TaskCanceledException)
+        {
+            Log.Error("[QueryForMetadata] Metadata query timed out (1200ms): {0}", azCommand);
+            if (Telemetry.Enabled)
+            {
+                Dictionary<string, string> details = new()
+                {
+                    ["Command"] = azCommand,
+                    ["Message"] = "AzCLI metadata query timed out (1200ms)."
+                };
+                Telemetry.Trace(AzTrace.Exception(details));
+            }
+        }
         catch (Exception e)
         {
             Log.Error(e, "[QueryForMetadata] Exception while processing command: {0}", azCommand);

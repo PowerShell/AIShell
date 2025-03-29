@@ -139,6 +139,7 @@ internal class Settings
                 new PropertyElement<GPT>(nameof(GPT.Endpoint)),
                 new PropertyElement<GPT>(nameof(GPT.Deployment)),
                 new PropertyElement<GPT>(nameof(GPT.ModelName)),
+                new PropertyElement<GPT>(nameof(GPT.AuthType)),
                 new PropertyElement<GPT>(nameof(GPT.SystemPrompt)),
             ]);
     }

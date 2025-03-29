@@ -88,7 +88,7 @@ internal sealed class ConfigCommand : CommandBase
                     converter: ConfigName,
                     CancellationToken.None).GetAwaiter().GetResult()
                 : setting.Configs.FirstOrDefault(c => c.Name == name)) ?? throw new InvalidOperationException($"The configuration '{name}' doesn't exist.");
-            await setting.UseConfg(host, chosenConfig);
+            await setting.UseConfg(chosenConfig);
             host.MarkupLine($"Using the config [green]{chosenConfig.Name}[/]:");
         }
         catch (InvalidOperationException ex)

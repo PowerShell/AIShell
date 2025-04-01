@@ -8,7 +8,8 @@ namespace AIShell.Ollama.Agent;
 internal sealed class ConfigCommand : CommandBase
 {
     private readonly OllamaAgent _agnet;
-     public ConfigCommand(OllamaAgent agent)
+    
+    public ConfigCommand(OllamaAgent agent)
         : base("config", "Command for config management within the 'ollama' agent.")
     {
         _agnet = agent;
@@ -235,8 +236,7 @@ internal sealed class ModelCommand : CommandBase
         }
         catch (InvalidOperationException ex)
         {
-            string availableModelNames = ModelNamesAsString();
-            host.WriteErrorLine($"{ex.Message} Available Models(s): {availableModelNames}.");
+            host.WriteErrorLine(ex.Message);
         }
     }
 
@@ -245,10 +245,10 @@ internal sealed class ModelCommand : CommandBase
         // Reload the setting file if needed.
         _agnet.ReloadSettings();
 
-        var setting = _agnet.Settings;
+        var settings = _agnet.Settings;
         var host = Shell.Host;
 
-        if (setting is null || setting.GetAllModels().GetAwaiter().GetResult().Count is 0)
+        if (settings is null || settings.GetAllModels().GetAwaiter().GetResult().Count is 0)
         {
             host.WriteErrorLine("No models configured.");
             return;
@@ -256,23 +256,24 @@ internal sealed class ModelCommand : CommandBase
 
         try
         {
-            string chosenModel = string.IsNullOrEmpty(name)
-                ? host.PromptForSelectionAsync(
+            if (string.IsNullOrEmpty(name))
+            {
+                name = host.PromptForSelectionAsync(
                     title: "[orange1]Please select a [Blue]Model[/] to use[/]:",
-                    choices: setting.GetAllModels().GetAwaiter().GetResult(),
-                    CancellationToken.None).GetAwaiter().GetResult()
-                : setting.GetModelByName(name).GetAwaiter().GetResult();
+                    choices: settings.GetAllModels().GetAwaiter().GetResult(),
+                    CancellationToken.None).GetAwaiter().GetResult();
+            }
 
-            setting.UseModel(chosenModel).GetAwaiter().GetResult();
-            host.MarkupLine($"Using the model [green]{chosenModel}[/]:");
+            settings.EnsureModelNameIsValid(name).GetAwaiter().GetResult();
+
+            settings.UseModel(name).GetAwaiter().GetResult();
+            host.MarkupLine($"Using the model [green]{name}[/]:");
         }
         catch (InvalidOperationException ex)
         {
-            string availableModelNames = ModelNamesAsString();
-            host.WriteErrorLine($"{ex.Message} Available Modless: {availableModelNames}.");
+            host.WriteErrorLine(ex.Message);
         }
     }
 
     private IEnumerable<string> ModelNameCompleter(CompletionContext context) => _agnet.Settings?.GetAllModels().GetAwaiter().GetResult() ?? [];
-    private string ModelNamesAsString() => string.Join(", ", ModelNameCompleter(null));
 }

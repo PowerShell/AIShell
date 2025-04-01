@@ -8,7 +8,7 @@ namespace AIShell.Ollama.Agent;
 internal class Settings
 {
     private bool _initialized = false;
-    private List<string> AvailableModels { get; set; } = [];
+    private List<string> _availableModels = [];
     public List<ModelConfig> Configs { get; }
     public string Endpoint { get; }
     public bool Stream { get; }
@@ -48,44 +48,31 @@ internal class Settings
             return;
         }
 
-        OllamaApiClient _client = null;
-        try
-        {
-            _client = new OllamaApiClient(Endpoint);
-            var models = await _client.ListLocalModelsAsync(cancellationToken).ConfigureAwait(false);
-            AvailableModels = [.. models.Select(m => m.Name)];
+        using OllamaApiClient client = new (Endpoint);
+        var models = await client.ListLocalModelsAsync(cancellationToken).ConfigureAwait(false);
+        _availableModels = [.. models.Select(m => m.Name)];
 
-            if (AvailableModels.Count == 0)
-            {
-                throw new InvalidOperationException($"No models are available to use from '{Endpoint}'.");
-            }
-            _initialized = true;
-        }
-        finally
+        if (_availableModels.Count == 0)
         {
-            if (_client is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
+            throw new InvalidOperationException($"No models are available to use from '{Endpoint}'.");
         }
+        _initialized = true;
     }
 
     internal async Task<ICollection<string>> GetAllModels(CancellationToken cancellationToken = default)
     {
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        return AvailableModels;
+        return _availableModels;
     }
 
-    internal async Task<string> GetModelByName(string name, CancellationToken cancellationToken = default)
+    internal async Task EnsureModelNameIsValid(string name, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        if (!AvailableModels.Contains(name))
+        if (!_availableModels.Contains(name))
         {
-            throw new InvalidOperationException($"A model with the name '{name}' doesn't exist in the list of available models.");
+            throw new InvalidOperationException($"A model with the name '{name}' doesn't exist. The available models are: [{string.Join(", ", _availableModels)}].");
         }
-
-        return name;
     }
 
     private static List<IRenderElement<string>> GetSystemPromptRenderElements() => [ new CustomElement<string>(label: "System prompt", s => s) ];
@@ -93,35 +80,38 @@ internal class Settings
     internal void ShowSystemPrompt(IHost host) => host.RenderList(RunningConfig.SystemPrompt, GetSystemPromptRenderElements());
 
     internal void SetSystemPrompt(IHost host, string prompt)
-    {   
+    {
         RunningConfig = RunningConfig with { SystemPrompt = prompt ?? string.Empty };
         host.RenderList(RunningConfig.SystemPrompt, GetSystemPromptRenderElements());
     }
     
-    private static List<IRenderElement<string>> GetRenderModelElements(string currentModelName) => [
+    private static List<IRenderElement<string>> GetRenderModelElements(Func<string, bool> isActive) => [
         new CustomElement<string>(label: "Model Name", m => m),
-        new CustomElement<string>(label: "Active", m => m == currentModelName ? "true" : string.Empty)
+        new CustomElement<string>(label: "Active", m => isActive(m) ? "true" : string.Empty)
     ];
 
-    internal async Task UseModel(string name, CancellationToken cancellationToken = default) =>
-        RunningConfig = RunningConfig with { ModelName = await GetModelByName(name, cancellationToken).ConfigureAwait(false) };
+    internal async Task UseModel(string name, CancellationToken cancellationToken = default)
+    {
+        await EnsureModelNameIsValid(name, cancellationToken).ConfigureAwait(false);
+        RunningConfig = RunningConfig with { ModelName = name };
+    }
 
     internal async Task ListAllModels(IHost host, CancellationToken cancellationToken = default)
     {
         await EnsureModelsInitialized(cancellationToken).ConfigureAwait(false);
-        host.RenderTable(AvailableModels, GetRenderModelElements(RunningConfig.ModelName));
+        host.RenderTable(_availableModels, GetRenderModelElements(m => m == RunningConfig.ModelName));
     }
 
     internal async Task ShowOneModel(IHost host, string name, CancellationToken cancellationToken = default)
     {
-        var model = await GetModelByName(name, cancellationToken).ConfigureAwait(false);
-        host.RenderList(model, GetRenderModelElements(RunningConfig.ModelName));
+        await EnsureModelNameIsValid(name, cancellationToken).ConfigureAwait(false);
+        host.RenderList(name, GetRenderModelElements(m => m == RunningConfig.ModelName));
     }
 
     internal async Task UseConfg(ModelConfig config, CancellationToken cancellationToken = default)
     {
+        await EnsureModelNameIsValid(config.ModelName, cancellationToken).ConfigureAwait(false);
         RunningConfig = config with { };
-        await UseModel(RunningConfig.ModelName, cancellationToken).ConfigureAwait(false);
     }
 
     internal void ListAllConfigs(IHost host)
@@ -154,12 +144,12 @@ internal class Settings
         if (string.IsNullOrEmpty(RunningConfig.ModelName))
         {
             // There is no model set, so use the first one available.
-            RunningConfig = RunningConfig with { ModelName = AvailableModels.First() };
-            host.MarkupLine($"No Ollama model is configured. Using the first available model [green]'{RunningConfig.ModelName}'.");
+            RunningConfig = RunningConfig with { ModelName = _availableModels.First() };
+            host.MarkupLine($"No Ollama model is configured. Using the first available model [green]'{RunningConfig.ModelName}'[/].");
         }
         else
         {
-            if (!AvailableModels.Contains(RunningConfig.ModelName))
+            if (!_availableModels.Contains(RunningConfig.ModelName))
             {
                 throw new InvalidOperationException($"The configured Ollama model '{RunningConfig.ModelName}' doesn't exist in the list of available models.");
             }
@@ -176,8 +166,7 @@ internal class Settings
 /// <param name="ModelName">Required. The name of the Ollama model to be used.</param>
 /// <param name="SystemPrompt">Optional. The system prompt to be used with this model configuration.</param>
 /// <param name="Description">Optional. A human-readable description of this configuration.</param>
-/// <param name="ResetContext">Optional. Indicates whether the context should be reset when switching to this configuration. Defaults to <c>false</c>.</param>
-
+/// <param name="ResetContext">Optional. Indicates whether the context should be reset after each interaction. Defaults to <c>false</c>.</param>
 internal record ModelConfig(string Name, string ModelName, string SystemPrompt = "", string Description = "", bool ResetContext = false);
 
 /// <summary>

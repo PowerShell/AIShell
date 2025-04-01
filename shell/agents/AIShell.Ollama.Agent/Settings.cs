@@ -25,19 +25,20 @@ internal class Settings
         Endpoint = configData.Endpoint;
         Stream = configData.Stream;
 
-        // Ensure the default configuration is available in the list of configurations.
-        if (!string.IsNullOrEmpty(configData.DefaultConfig) &&
-                !Configs.Any(c => c.Name == configData.DefaultConfig))
+        if (string.IsNullOrEmpty(configData.DefaultConfig))
         {
-            throw new InvalidOperationException($"The selected default configuration '{configData.DefaultConfig}' doesn't exist.");
+            RunningConfig = Configs.Count > 0
+                ? Configs[0] with { }  /* No default config - use the first one defined in Configs */
+                : new ModelConfig(nameof(RunningConfig), ModelName: ""); /* No config available - use empty */
         }
-
-        RunningConfig = (Configs, configData.DefaultConfig) switch
+        else
         {
-            (not [], "") => Configs.First() with { }, /* No default config - use the first one defined in Configs */
-            (not [], _) => Configs.First(c => c.Name == configData.DefaultConfig) with { }, /* Use the default config */
-            _ => new ModelConfig(nameof(RunningConfig), "") /* No config available - use empty */
-        };
+            // Ensure the default configuration is available in the list of configurations.
+            var first = Configs.FirstOrDefault(c => c.Name == configData.DefaultConfig)
+                ?? throw new InvalidOperationException($"The selected default configuration '{configData.DefaultConfig}' doesn't exist.");
+            // Use the default config
+            RunningConfig = first with { };
+        }
     }
 
     private async Task EnsureModelsInitialized(CancellationToken cancellationToken = default)

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Management.Automation;
-using System.Text;
 
 namespace AIShell.Integration.Commands;
 
@@ -11,6 +10,9 @@ public class StartAIShellCommand : PSCmdlet
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string Path { get; set; }
+
+    private string _venvPipPath;
+    private string _venvPythonPath;
 
     protected override void BeginProcessing()
     {
@@ -80,25 +82,21 @@ public class StartAIShellCommand : PSCmdlet
                     targetObject: null));
             }
 
-            var python = SessionState.InvokeCommand.GetCommand("python3", CommandTypes.Application);
-            if (python is null)
+            try
+            {
+                InitAndCleanup.CreateVirtualEnvTask.GetAwaiter().GetResult();
+            }
+            catch (Exception exception)
             {
                 ThrowTerminatingError(new(
-                    new NotSupportedException("The executable 'python3' (Windows Terminal) cannot be found. It's required to split a pane in iTerm2 programmatically."),
-                    "Python3Missing",
-                    ErrorCategory.NotInstalled,
+                    exception,
+                    "FailedToCreateVirtualEnvironment",
+                    ErrorCategory.InvalidOperation,
                     targetObject: null));
             }
 
-            var pip3 = SessionState.InvokeCommand.GetCommand("pip3", CommandTypes.Application);
-            if (pip3 is null)
-            {
-                ThrowTerminatingError(new(
-                    new NotSupportedException("The executable 'pip3' cannot be found. It's required to split a pane in iTerm2 programmatically."),
-                    "Pip3Missing",
-                    ErrorCategory.NotInstalled,
-                    targetObject: null));
-            }
+            _venvPipPath = System.IO.Path.Join(InitAndCleanup.VirtualEnvPath, "bin", "pip3");
+            _venvPythonPath = System.IO.Path.Join(InitAndCleanup.VirtualEnvPath, "bin", "python3");
         }
         else
         {
@@ -112,12 +110,11 @@ public class StartAIShellCommand : PSCmdlet
 
     protected override void EndProcessing()
     {
-        string pipeName = Channel.Singleton.StartChannelSetup();
-
         if (OperatingSystem.IsWindows())
         {
             ProcessStartInfo startInfo;
             string wtProfileGuid = Environment.GetEnvironmentVariable("WT_PROFILE_ID");
+            string pipeName = Channel.Singleton.StartChannelSetup();
 
             if (wtProfileGuid is null)
             {
@@ -169,22 +166,28 @@ public class StartAIShellCommand : PSCmdlet
         }
         else if (OperatingSystem.IsMacOS())
         {
-            // Install the Python package 'iterm2'.
-            ProcessStartInfo startInfo = new("pip3")
+            // Install the Python package 'iterm2' to the venv.
+            ProcessStartInfo startInfo = new(_venvPipPath)
             {
-                ArgumentList = { "install", "-q", "iterm2" },
+                ArgumentList = { "install", "-q", "iterm2", "--disable-pip-version-check" },
                 RedirectStandardError = true,
                 RedirectStandardOutput = true
             };
 
-            Process proc = new() { StartInfo = startInfo };
-            proc.Start();
+            Process proc = Process.Start(startInfo);
             proc.WaitForExit();
 
             if (proc.ExitCode is 1)
             {
+                string error = "The Python package 'iterm2' cannot be installed. It's required to split a pane in iTerm2 programmatically.";
+                string stderr = proc.StandardError.ReadToEnd();
+                if (!string.IsNullOrEmpty(stderr))
+                {
+                    error = $"{error}\nError details:\n{stderr}";
+                }
+
                 ThrowTerminatingError(new(
-                    new NotSupportedException("The Python package 'iterm2' cannot be installed. It's required to split a pane in iTerm2 programmatically."),
+                    new NotSupportedException(error),
                     "iterm2Missing",
                     ErrorCategory.NotInstalled,
                     targetObject: null));
@@ -192,71 +195,11 @@ public class StartAIShellCommand : PSCmdlet
 
             proc.Dispose();
 
-            // Write the Python script to a temp file, if not yet.
-            string pythonScript = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "__aish_split_pane.py");
-            if (!File.Exists(pythonScript))
-            {
-                File.WriteAllText(pythonScript, SplitPanePythonCode, Encoding.UTF8);
-            }
-
             // Run the Python script to split the pane and start AIShell.
-            startInfo = new("python3") { ArgumentList = { pythonScript, Path, pipeName } };
-            proc = new() { StartInfo = startInfo };
-            proc.Start();
+            string pipeName = Channel.Singleton.StartChannelSetup();
+            startInfo = new(_venvPythonPath) { ArgumentList = { InitAndCleanup.PythonScript, Path, pipeName } };
+            proc = Process.Start(startInfo);
             proc.WaitForExit();
         }
     }
-
-    private const string SplitPanePythonCode = """
-        import iterm2
-        import sys
-
-        # iTerm needs to be running for this to work
-        async def main(connection):
-            app = await iterm2.async_get_app(connection)
-
-            # Foreground the app
-            await app.async_activate()
-
-            window = app.current_terminal_window
-            if window is not None:
-                # Get the current pane so that we can split it.
-                current_tab = window.current_tab
-                current_pane = current_tab.current_session
-
-                # Get the total width before splitting.
-                width = current_pane.grid_size.width
-
-                # Split pane vertically
-                split_pane = await current_pane.async_split_pane(vertical=True)
-
-                # Get the height of the pane after splitting. This value will be
-                # slightly smaller than its height before splitting.
-                height = current_pane.grid_size.height
-
-                # Calculate the new width for both panes using the ratio 0.4 for the new pane.
-                # Then set the preferred size for both pane sessions.
-                new_current_width = round(width * 0.6);
-                new_split_width = width - new_current_width;
-                current_pane.preferred_size = iterm2.Size(new_current_width, height)
-                split_pane.preferred_size = iterm2.Size(new_split_width, height);
-
-                # Update the layout, which will change the panes to preferred size.
-                await current_tab.async_update_layout()
-
-                await split_pane.async_send_text(f'{app_path} --channel {channel}\n')
-            else:
-                # You can view this message in the script console.
-                print("No current iTerm2 window. Make sure you are running in iTerm2.")
-
-        if len(sys.argv) > 1:
-            app_path = sys.argv[1]
-            channel = sys.argv[2]
-
-            # Do not specify True for retry. It's possible that the user hasn't enable the Python API for iTerm2,
-            # and in that case, we want it to fail immediately instead of stucking in retries.
-            iterm2.run_until_complete(main)
-        else:
-            print("Please provide the application path as a command line argument.")
-        """;
 }

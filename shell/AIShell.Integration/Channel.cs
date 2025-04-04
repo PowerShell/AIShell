@@ -283,11 +283,3 @@ public class Channel : IDisposable
 }
 
 internal record CodePostData(string CodeToInsert, List<PredictionCandidate> PredictionCandidates);
-
-public class Init : IModuleAssemblyCleanup
-{
-    public void OnRemove(PSModuleInfo psModuleInfo)
-    {
-        Channel.Singleton?.Dispose();
-    }
-}

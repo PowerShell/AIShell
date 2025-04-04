@@ -13,6 +13,7 @@ public class StartAIShellCommand : PSCmdlet
 
     private string _venvPipPath;
     private string _venvPythonPath;
+    private static bool s_iterm2Installed = false;
 
     protected override void BeginProcessing()
     {
@@ -166,34 +167,44 @@ public class StartAIShellCommand : PSCmdlet
         }
         else if (OperatingSystem.IsMacOS())
         {
+            Process proc;
+            ProcessStartInfo startInfo;
+
             // Install the Python package 'iterm2' to the venv.
-            ProcessStartInfo startInfo = new(_venvPipPath)
+            if (!s_iterm2Installed)
             {
-                ArgumentList = { "install", "-q", "iterm2", "--disable-pip-version-check" },
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            };
-
-            Process proc = Process.Start(startInfo);
-            proc.WaitForExit();
-
-            if (proc.ExitCode is 1)
-            {
-                string error = "The Python package 'iterm2' cannot be installed. It's required to split a pane in iTerm2 programmatically.";
-                string stderr = proc.StandardError.ReadToEnd();
-                if (!string.IsNullOrEmpty(stderr))
+                startInfo = new(_venvPipPath)
                 {
-                    error = $"{error}\nError details:\n{stderr}";
+                    ArgumentList = { "install", "-q", "iterm2", "--disable-pip-version-check" },
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                };
+
+                proc = Process.Start(startInfo);
+                proc.WaitForExit();
+
+                if (proc.ExitCode is 0)
+                {
+                    s_iterm2Installed = true;
+                }
+                else
+                {
+                    string error = "The Python package 'iterm2' cannot be installed. It's required to split a pane in iTerm2 programmatically.";
+                    string stderr = proc.StandardError.ReadToEnd();
+                    if (!string.IsNullOrEmpty(stderr))
+                    {
+                        error = $"{error}\nError details:\n{stderr}";
+                    }
+
+                    ThrowTerminatingError(new(
+                        new NotSupportedException(error),
+                        "iterm2Missing",
+                        ErrorCategory.NotInstalled,
+                        targetObject: null));
                 }
 
-                ThrowTerminatingError(new(
-                    new NotSupportedException(error),
-                    "iterm2Missing",
-                    ErrorCategory.NotInstalled,
-                    targetObject: null));
+                proc.Dispose();
             }
-
-            proc.Dispose();
 
             // Run the Python script to split the pane and start AIShell.
             string pipeName = Channel.Singleton.StartChannelSetup();

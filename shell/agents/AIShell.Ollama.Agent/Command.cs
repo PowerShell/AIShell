@@ -5,36 +5,36 @@ using AIShell.Abstraction;
 
 namespace AIShell.Ollama.Agent;
 
-internal sealed class ConfigCommand : CommandBase
+internal sealed class PresetCommand : CommandBase
 {
     private readonly OllamaAgent _agnet;
     
-    public ConfigCommand(OllamaAgent agent)
-        : base("config", "Command for config management within the 'ollama' agent.")
+    public PresetCommand(OllamaAgent agent)
+        : base("preset", "Command for preset management within the 'ollama' agent.")
     {
         _agnet = agent;
 
-        var use = new Command("use", "Specify a config to use.");
-        var useConfig = new Argument<string>(
-            name: "Config",
+        var use = new Command("use", "Specify a preset to use.");
+        var usePreset = new Argument<string>(
+            name: "Preset",
             getDefaultValue: () => null,
-            description: "Name of a configuration.").AddCompletions(ConfigNameCompleter);
-        use.AddArgument(useConfig);
-        use.SetHandler(UseConfigAction, useConfig);
+            description: "Name of a preset.").AddCompletions(PresetNameCompleter);
+        use.AddArgument(usePreset);
+        use.SetHandler(UsePresetAction, usePreset);
 
-        var list = new Command("list", "List a specific config, or all available configs.");
-        var listConfig = new Argument<string>(
-            name: "Config",
+        var list = new Command("list", "List a specific preset, or all configured presets.");
+        var listPreset = new Argument<string>(
+            name: "Preset",
             getDefaultValue: () => null,
-            description: "Name of a configuration.").AddCompletions(ConfigNameCompleter);
-        list.AddArgument(listConfig);
-        list.SetHandler(ListConfigAction, listConfig);
+            description: "Name of a preset.").AddCompletions(PresetNameCompleter);
+        list.AddArgument(listPreset);
+        list.SetHandler(ListPresetAction, listPreset);
 
         AddCommand(list);
         AddCommand(use);
     }
 
-    private void ListConfigAction(string name)
+    private void ListPresetAction(string name)
     {
         IHost host = Shell.Host;
 
@@ -45,28 +45,28 @@ internal sealed class ConfigCommand : CommandBase
 
         if (settings is null)
         {
-            host.WriteErrorLine("Invalid configuration.");
-            return;
-        }
-
-        if (string.IsNullOrEmpty(name))
-        {
-            settings.ListAllConfigs(host);
+            host.WriteErrorLine("Error loading the configuration.");
             return;
         }
 
         try
         {
-            settings.ShowOneConfig(host, name);
+            if (string.IsNullOrEmpty(name))
+            {
+                settings.ListAllPresets(host);
+                return;
+            }
+
+            settings.ShowOnePreset(host, name);
         }
         catch (InvalidOperationException ex)
         {
-            string availableConfigNames = ConfigNamesAsString();
-            host.WriteErrorLine($"{ex.Message} Available cofiguration(s): {availableConfigNames}.");
+            string availablePresetNames = PresetNamesAsString();
+            host.WriteErrorLine($"{ex.Message} Available preset(s): {availablePresetNames}.");
         }
     }
 
-    private async Task UseConfigAction(string name)
+    private async Task UsePresetAction(string name)
     {
         // Reload the setting file if needed.
         _agnet.ReloadSettings();
@@ -74,34 +74,40 @@ internal sealed class ConfigCommand : CommandBase
         var setting = _agnet.Settings;
         var host = Shell.Host;
 
-        if (setting is null || setting.Configs.Count is 0)
+        if (setting is null)
         {
-            host.WriteErrorLine("No configs configured.");
+            host.WriteErrorLine("Error loading the configuration.");
+            return;
+        }
+
+        if (setting.Presets.Count is 0)
+        {
+            host.WriteErrorLine("There are no presets configured.");
             return;
         }
 
         try
         {
-            ModelConfig chosenConfig = (string.IsNullOrEmpty(name)
+            ModelConfig chosenPreset = (string.IsNullOrEmpty(name)
                 ? host.PromptForSelectionAsync(
-                    title: "[orange1]Please select a [Blue]Configuration[/] to use[/]:",
-                    choices: setting.Configs,
-                    converter: ConfigName,
+                    title: "[orange1]Please select a [Blue]Preset[/] to use[/]:",
+                    choices: setting.Presets,
+                    converter: PresetName,
                     CancellationToken.None).GetAwaiter().GetResult()
-                : setting.Configs.FirstOrDefault(c => c.Name == name)) ?? throw new InvalidOperationException($"The configuration '{name}' doesn't exist.");
-            await setting.UseConfg(chosenConfig);
-            host.MarkupLine($"Using the config [green]{chosenConfig.Name}[/]:");
+                : setting.Presets.FirstOrDefault(c => c.Name == name)) ?? throw new InvalidOperationException($"The preset '{name}' doesn't exist.");
+            await setting.UsePreset(host, chosenPreset);
+            host.MarkupLine($"Using the preset [green]{chosenPreset.Name}[/]:");
         }
         catch (InvalidOperationException ex)
         {
-            string availableConfigNames = ConfigNamesAsString();
-            host.WriteErrorLine($"{ex.Message} Available configurations: {availableConfigNames}.");
+            string availablePresetNames = PresetNamesAsString();
+            host.WriteErrorLine($"{ex.Message} Available presets: {availablePresetNames}.");
         }
     }
 
-    private static string ConfigName(ModelConfig config) => config.Name.Any(Char.IsWhiteSpace) ? $"\"{config.Name}\"" : config.Name;
-    private IEnumerable<string> ConfigNameCompleter(CompletionContext context) => _agnet.Settings?.Configs?.Select(ConfigName) ?? [];
-    private string ConfigNamesAsString() => string.Join(", ", ConfigNameCompleter(null));
+    private static string PresetName(ModelConfig preset) => preset.Name.Any(Char.IsWhiteSpace) ? $"\"{preset.Name}\"" : preset.Name;
+    private IEnumerable<string> PresetNameCompleter(CompletionContext context) => _agnet.Settings?.Presets?.Select(PresetName) ?? [];
+    private string PresetNamesAsString() => string.Join(", ", PresetNameCompleter(null));
 }
 
 internal sealed class SystemPromptCommand : CommandBase
@@ -139,7 +145,7 @@ internal sealed class SystemPromptCommand : CommandBase
 
         if (settings is null)
         {
-            host.WriteErrorLine("Invalid configuration.");
+            host.WriteErrorLine("Error loading the configuration.");
             return;
         }
 
@@ -165,7 +171,7 @@ internal sealed class SystemPromptCommand : CommandBase
 
         if (settings is null)
         {
-            host.WriteErrorLine("Invalid configuration.");
+            host.WriteErrorLine("Error loading the configuration.");
             return;
         }
 
@@ -220,18 +226,17 @@ internal sealed class ModelCommand : CommandBase
 
         if (settings is null)
         {
-            host.WriteErrorLine("Invalid configuration.");
+            host.WriteErrorLine("Error loading the configuration.");
             return;
         }
-
-        if (string.IsNullOrEmpty(name))
-        {
-            settings.ListAllModels(host).GetAwaiter().GetResult();
-            return;
-        }
-
         try
         {
+            if (string.IsNullOrEmpty(name))
+            {
+                settings.ListAllModels(host).GetAwaiter().GetResult();
+                return;
+            }
+
             settings.ShowOneModel(host, name).GetAwaiter().GetResult();
         }
         catch (InvalidOperationException ex)
@@ -248,26 +253,35 @@ internal sealed class ModelCommand : CommandBase
         var settings = _agnet.Settings;
         var host = Shell.Host;
 
-        if (settings is null || settings.GetAllModels().GetAwaiter().GetResult().Count is 0)
+        if (settings is null)
         {
-            host.WriteErrorLine("No models configured.");
+            host.WriteErrorLine("Error loading the configuration.");
             return;
         }
 
         try
         {
+            if (!settings.PerformSelfcheck(host))
+            {
+                return;
+            }
+
+            if (settings.GetAllModels().GetAwaiter().GetResult().Count is 0)
+            {
+                host.WriteErrorLine("No models found.");
+                return;
+            }
+
             if (string.IsNullOrEmpty(name))
             {
                 name = host.PromptForSelectionAsync(
                     title: "[orange1]Please select a [Blue]Model[/] to use[/]:",
-                    choices: settings.GetAllModels().GetAwaiter().GetResult(),
+                    choices: settings.GetAllModels(host).GetAwaiter().GetResult(),
                     CancellationToken.None).GetAwaiter().GetResult();
             }
 
-            settings.EnsureModelNameIsValid(name).GetAwaiter().GetResult();
-
-            settings.UseModel(name).GetAwaiter().GetResult();
-            host.MarkupLine($"Using the model [green]{name}[/]:");
+            settings.UseModel(host, name).GetAwaiter().GetResult();
+            host.MarkupLine($"Using the model [green]{name}[/]");
         }
         catch (InvalidOperationException ex)
         {

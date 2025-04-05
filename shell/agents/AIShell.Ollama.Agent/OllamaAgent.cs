@@ -110,7 +110,7 @@ public sealed partial class OllamaAgent : ILLMAgent
     /// <summary>
     /// Get commands that an agent can register to the shell when being loaded.
     /// </summary>
-    public IEnumerable<CommandBase> GetCommands() => [new ConfigCommand(this), new ModelCommand(this), new SystemPromptCommand(this)];
+    public IEnumerable<CommandBase> GetCommands() => [new PresetCommand(this), new ModelCommand(this), new SystemPromptCommand(this)];
 
     /// <summary>
     /// Gets the path to the setting file of the agent.
@@ -170,9 +170,8 @@ public sealed partial class OllamaAgent : ILLMAgent
         // Reload the setting file if needed.
         ReloadSettings();
 
-        if (IsLocalHost().IsMatch(_client.Uri.Host) && Process.GetProcessesByName("ollama").Length is 0)
+        if (!_settings.PerformSelfcheck(host))
         {
-            host.WriteErrorLine("Please be sure the Ollama is installed and server is running. Check all the prerequisites in the README of this agent are met.");
             return false;
         }
 
@@ -253,14 +252,6 @@ public sealed partial class OllamaAgent : ILLMAgent
             host.WriteErrorLine($"Ollama active model: \"{activeModel}\"");
             host.WriteErrorLine($"Ollama endpoint:     \"{_settings.Endpoint}\"");
             host.WriteErrorLine($"Ollama settings:     \"{SettingFile}\"");
-        }
-        finally
-        {
-            if (_settings.RunningConfig.ResetContext)
-            {
-                // Reset the request context
-            	ResetContext();
-            }
         }
 
         return true;
@@ -346,11 +337,4 @@ public sealed partial class OllamaAgent : ILLMAgent
         """;
         File.WriteAllText(SettingFile, SampleContent, Encoding.UTF8);
     }
-
-    /// <summary>
-    /// Defines a generated regular expression to match localhost addresses
-    /// "localhost", "127.0.0.1" and "[::1]" with case-insensitivity.
-    /// </summary>
-    [GeneratedRegex("^(localhost|127\\.0\\.0\\.1|\\[::1\\])$", RegexOptions.IgnoreCase)]
-    internal partial Regex IsLocalHost();
 }

@@ -319,7 +319,9 @@ public sealed partial class OllamaAgent : ILLMAgent
             // 1. Install Ollama: `winget install Ollama.Ollama`
             // 2. Start Ollama API server: `ollama serve`
             // 3. Install Ollama model: `ollama pull phi3`
-            "Configs": [
+            
+            // Declare predefined model configurations
+            "Presets": [
                 {
                     "Name": "PowerShell Expert",
                     "Description": "A ollama agent with expertise in PowerShell scripting and command line utilities.",
@@ -331,8 +333,8 @@ public sealed partial class OllamaAgent : ILLMAgent
             "Endpoint": "http://localhost:11434",
             // Enable Ollama streaming
             "Stream": false,
-            // Specify the default model to use
-            "DefaultConfig": "PowerShell Expert"
+            // Specify the default preset to use
+            "DefaultPreset": "PowerShell Expert"
         }
         """;
         File.WriteAllText(SettingFile, SampleContent, Encoding.UTF8);

@@ -175,7 +175,19 @@ public class StartAIShellCommand : PSCmdlet
             {
                 startInfo = new(_venvPipPath)
                 {
-                    ArgumentList = { "install", "-q", "iterm2", "--disable-pip-version-check" },
+                    // Make 'pypi.org' and 'files.pythonhosted.org' as trusted hosts, because a security software
+                    // may cause issue to SSL validation for access to/from those two endpoints.
+                    // See https://stackoverflow.com/a/71993364 for details.
+                    ArgumentList = {
+                        "install",
+                        "-q",
+                        "--disable-pip-version-check",
+                        "--trusted-host",
+                        "pypi.org",
+                        "--trusted-host",
+                        "files.pythonhosted.org",
+                        "iterm2"
+                    },
                     RedirectStandardError = true,
                     RedirectStandardOutput = true
                 };

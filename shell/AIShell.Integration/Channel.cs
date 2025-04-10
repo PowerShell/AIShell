@@ -16,7 +16,7 @@ public class Channel : IDisposable
     private readonly Type _psrlType;
     private readonly Runspace _runspace;
     private readonly MethodInfo _psrlInsert, _psrlRevertLine, _psrlAcceptLine;
-    private readonly FieldInfo _psrlHandleResizing;
+    private readonly FieldInfo _psrlHandleResizing, _psrlReadLineReady;
     private readonly object _psrlSingleton;
     private readonly ManualResetEvent _connSetupWaitHandler;
     private readonly Predictor _predictor;
@@ -42,14 +42,17 @@ public class Channel : IDisposable
             .Append(Path.GetFileNameWithoutExtension(Environment.ProcessPath))
             .ToString();
 
-        BindingFlags bindingFlags = BindingFlags.Static | BindingFlags.Public;
-        _psrlInsert = _psrlType.GetMethod("Insert", bindingFlags, [typeof(string)]);
-        _psrlRevertLine = _psrlType.GetMethod("RevertLine", bindingFlags);
-        _psrlAcceptLine = _psrlType.GetMethod("AcceptLine", bindingFlags);
+        BindingFlags methodFlags = BindingFlags.Static | BindingFlags.Public;
+        _psrlInsert = _psrlType.GetMethod("Insert", methodFlags, [typeof(string)]);
+        _psrlRevertLine = _psrlType.GetMethod("RevertLine", methodFlags);
+        _psrlAcceptLine = _psrlType.GetMethod("AcceptLine", methodFlags);
 
         FieldInfo singletonInfo = _psrlType.GetField("_singleton", BindingFlags.Static | BindingFlags.NonPublic);
         _psrlSingleton = singletonInfo.GetValue(null);
-        _psrlHandleResizing = _psrlType.GetField("_handlePotentialResizing", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        BindingFlags fieldFlags = BindingFlags.Instance | BindingFlags.NonPublic;
+        _psrlReadLineReady = _psrlType.GetField("_readLineReady", fieldFlags);
+        _psrlHandleResizing = _psrlType.GetField("_handlePotentialResizing", fieldFlags);
 
         _predictor = new Predictor();
         _onIdleAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdleHandler()");
@@ -223,10 +226,9 @@ public class Channel : IDisposable
             codeToInsert = sb.ToString();
         }
 
-        // When PSReadLine is actively running, 'TreatControlCAsInput' would be set to 'true' because
-        // it handles 'Ctrl+c' as regular input.
+        // When PSReadLine is actively running, its '_readLineReady' field should be set to 'true'.
         // When the value is 'false', it means PowerShell is still busy running scripts or commands.
-        if (Console.TreatControlCAsInput)
+        if (_psrlReadLineReady.GetValue(_psrlSingleton) is true)
         {
             PSRLRevertLine();
             PSRLInsert(codeToInsert);

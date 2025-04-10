@@ -16,6 +16,8 @@ public class Channel : IDisposable
     private readonly Type _psrlType;
     private readonly Runspace _runspace;
     private readonly MethodInfo _psrlInsert, _psrlRevertLine, _psrlAcceptLine;
+    private readonly FieldInfo _psrlHandleResizing;
+    private readonly object _psrlSingleton;
     private readonly ManualResetEvent _connSetupWaitHandler;
     private readonly Predictor _predictor;
     private readonly ScriptBlock _onIdleAction;
@@ -44,6 +46,10 @@ public class Channel : IDisposable
         _psrlInsert = _psrlType.GetMethod("Insert", bindingFlags, [typeof(string)]);
         _psrlRevertLine = _psrlType.GetMethod("RevertLine", bindingFlags);
         _psrlAcceptLine = _psrlType.GetMethod("AcceptLine", bindingFlags);
+
+        FieldInfo singletonInfo = _psrlType.GetField("_singleton", BindingFlags.Static | BindingFlags.NonPublic);
+        _psrlSingleton = singletonInfo.GetValue(null);
+        _psrlHandleResizing = _psrlType.GetField("_handlePotentialResizing", BindingFlags.Instance | BindingFlags.NonPublic);
 
         _predictor = new Predictor();
         _onIdleAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdleHandler()");
@@ -268,17 +274,43 @@ public class Channel : IDisposable
 
     private void PSRLInsert(string text)
     {
+        using var _ = new NoWindowResizingCheck();
         _psrlInsert.Invoke(null, [text]);
     }
 
     private void PSRLRevertLine()
     {
+        using var _ = new NoWindowResizingCheck();
         _psrlRevertLine.Invoke(null, [null, null]);
     }
 
     private void PSRLAcceptLine()
     {
+        using var _ = new NoWindowResizingCheck();
         _psrlAcceptLine.Invoke(null, [null, null]);
+    }
+
+    /// <summary>
+    /// We assume the terminal window will not resize during the code-post operation and hence disable the window resizing check.
+    /// This is to avoid reading console cursor positions while PSReadLine is already blocked on 'Console.ReadKey'.
+    /// On Unix system, when we are already blocked on key input, reading cursor position on another thread will block too.
+    /// </summary>
+    private class NoWindowResizingCheck : IDisposable
+    {
+        private readonly object _originalValue;
+
+        internal NoWindowResizingCheck()
+        {
+            Channel channel = Singleton;
+            _originalValue = channel._psrlHandleResizing.GetValue(channel._psrlSingleton);
+            channel._psrlHandleResizing.SetValue(channel._psrlSingleton, false);
+        }
+
+        public void Dispose()
+        {
+            Channel channel = Singleton;
+            channel._psrlHandleResizing.SetValue(channel._psrlSingleton, _originalValue);
+        }
     }
 }
 

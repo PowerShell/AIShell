@@ -52,8 +52,7 @@ extends:
         Network: KS3
       WindowsHostVersion:
         Version: 2022
-        # Azure container/blob operations get blocked when using KS3
-        Network: KS2
+        Network: KS3
     globalSdl:
       disableLegacyManifest: true
       # disabled Armorty as we dont have any ARM templates to scan. It fails on some sample ARM templates.

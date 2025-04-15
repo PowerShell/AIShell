@@ -8,19 +8,24 @@ jobs:
   displayName: Publish to NuGet
   condition: succeeded()
   pool:
-    type: windows
+    type: release
+    os: windows
+  templateContext:
+    inputs:
+      - input: pipelineArtifact
+        pipeline: AIShellPackagePipeline
+        artifactName: drop_nupkg_package
   variables:
   - group: 'mscodehub-code-read-akv'
   - name: ob_outputDirectory
     value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
 
   steps:
-  - download: AIShellPackagePipeline
-    artifact: drop_nupkg_package
-    displayName: Download nuget packages
-
-  - pwsh: |
-      Get-ChildItem '$(Pipeline.Workspace)/AIShellPackagePipeline/drop_nupkg_package/*.nupkg' -recurse
+   - task: PowerShell@2
+    inputs:
+      targetType: 'inline'
+      script: |
+        Get-ChildItem '$(Pipeline.Workspace)/drop_nupkg_package/*.nupkg' -recurse
     displayName: List nupkg package
 
   - task: NuGetCommand@2
@@ -28,6 +33,6 @@ jobs:
     condition: and(ne('${{ parameters.publish }}', 'false'), succeeded())
     inputs:
       command: push
-      packagesToPush: '$(Pipeline.Workspace)/AIShellPackagePipeline/drop_nupkg_package/*.nupkg'
+      packagesToPush: '$(Pipeline.Workspace)/drop_nupkg_package/*.nupkg'
       nuGetFeedType: external
       publishFeedCredentials: PowerShellNuGetOrgPush

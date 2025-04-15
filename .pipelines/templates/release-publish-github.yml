@@ -1,3 +1,8 @@
+parameters:
+  - name: publish
+    default: false
+    type: boolean
+
 jobs:
 - job: GithubReleaseDraft
   displayName: Create GitHub Release Draft
@@ -84,6 +89,7 @@ jobs:
       $description = '<!-- TODO: Generate release notes on GitHub! -->'
       Publish-ReleaseDraft -Tag $releaseTag -Name "$releaseTag Release of AIShell" -Description $description -User PowerShell -Repository AIShell -PackageFolder $(PackagesRoot) -Token $(GitHubReleasePat)
     displayName: Publish Release Draft
+    condition: and(ne('${{ parameters.publish }}', 'false'), succeeded())
 
 - template: /.pipelines/templates/wait-for-approval.yml@self
   parameters:

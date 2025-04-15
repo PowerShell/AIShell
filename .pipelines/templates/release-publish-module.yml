@@ -15,8 +15,6 @@ jobs:
         pipeline: AIShellPackagePipeline
         artifactName: drop_module_package
   variables:
-    - name: ob_outputDirectory
-      value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
     # Disable SBOM, signing, and codeQL for this job
     - name: ob_sdl_sbom_enabled
       value: false

@@ -26,7 +26,7 @@ jobs:
     - group: mscodehub-feed-read-akv
     - group: DotNetPrivateBuildAccess
     - name: ob_sdl_sbom_enabled
-      value: false
+      value: true
     - name: ob_sdl_codeql_compiled_enabled
       value: false
 

@@ -17,7 +17,7 @@ jobs:
     - group: DotNetPrivateBuildAccess
     - group: certificate_logical_to_actual
     - name: ob_sdl_sbom_enabled
-      value: false
+      value: true
     - name: ob_outputDirectory
       value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
     - name: repoRoot

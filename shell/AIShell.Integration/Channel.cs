@@ -293,9 +293,17 @@ public class Channel : IDisposable
     }
 
     /// <summary>
-    /// We assume the terminal window will not resize during the code-post operation and hence disable the window resizing check.
-    /// This is to avoid reading console cursor positions while PSReadLine is already blocked on 'Console.ReadKey'.
-    /// On Unix system, when we are already blocked on key input, reading cursor position on another thread will block too.
+    /// We assume the terminal window will not resize during the code-post operation and hence disable the window resizing check on macOS.
+    /// This is to avoid reading console cursor positions while PSReadLine is already blocked on 'Console.ReadKey', because on Unix system,
+    /// when we are already blocked on key input, reading cursor position on another thread will be blocked too until a key is pressed.
+    ///
+    /// We do need window resizing check on Windows due to how 'Start-AIShell' works differently:
+    ///  - On Windows, 'Start-AIShell' returns way BEFORE the current tab gets splitted for the sidecar pane, and PowerShell has already
+    ///    called into PSReadLine when the splitting actually happens. So, it's literally a window resizing for PSReadLine at that point
+    ///    and hence we need the window resizing check to correct the initial coordinates ('_initialX' and '_initialY').
+    ///  - On macOS, however, 'Start-AIShell' returns AFTER the current tab gets splitted for the sidecar pane. So, window resizing will
+    ///    be done before PowerShell calls into PSReadLine and hence there is no need for window resizing check on macOS.
+    /// Also, On Windows we can read cursor position without blocking even if another thread is blocked on calling 'ReadKey'.
     /// </summary>
     private class NoWindowResizingCheck : IDisposable
     {
@@ -303,15 +311,21 @@ public class Channel : IDisposable
 
         internal NoWindowResizingCheck()
         {
-            Channel channel = Singleton;
-            _originalValue = channel._psrlHandleResizing.GetValue(channel._psrlSingleton);
-            channel._psrlHandleResizing.SetValue(channel._psrlSingleton, false);
+            if (OperatingSystem.IsMacOS())
+            {
+                Channel channel = Singleton;
+                _originalValue = channel._psrlHandleResizing.GetValue(channel._psrlSingleton);
+                channel._psrlHandleResizing.SetValue(channel._psrlSingleton, false);
+            }
         }
 
         public void Dispose()
         {
-            Channel channel = Singleton;
-            channel._psrlHandleResizing.SetValue(channel._psrlSingleton, _originalValue);
+            if (OperatingSystem.IsMacOS())
+            {
+                Channel channel = Singleton;
+                channel._psrlHandleResizing.SetValue(channel._psrlSingleton, _originalValue);
+            }
         }
     }
 }

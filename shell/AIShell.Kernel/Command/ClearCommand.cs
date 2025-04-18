@@ -9,6 +9,7 @@ internal sealed class ClearCommand : CommandBase
         : base("cls", "Clear the screen.")
     {
         this.SetHandler(ClearAction);
+        this.AddAlias("clear");
     }
 
     private void ClearAction()

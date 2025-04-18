@@ -35,7 +35,6 @@ internal class ChatService
 
         _chatOptions = new ChatCompletionOptions()
         {
-            Temperature = 0,
             MaxOutputTokenCount = MaxResponseToken,
         };
     }
@@ -126,6 +125,8 @@ internal class ChatService
         }
 
         EndpointType type = _gptToUse.Type;
+        // Reasoning models do not support the temperature setting.
+        _chatOptions.Temperature = _gptToUse.ModelInfo.Reasoning ? null : 0;
 
         if (type is EndpointType.AzureOpenAI)
         {

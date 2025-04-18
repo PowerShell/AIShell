@@ -25,7 +25,10 @@ internal class ModelInfo
         // https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
         s_modelMap = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["o1"]            = new(tokenLimit: 200_000, encoding: Gpt4oEncoding),
+            ["o1"]            = new(tokenLimit: 200_000, encoding: Gpt4oEncoding, reasoning: true),
+            ["o3"]            = new(tokenLimit: 200_000, encoding: Gpt4oEncoding, reasoning: true),
+            ["o4-mini"]       = new(tokenLimit: 200_000, encoding: Gpt4oEncoding, reasoning: true),
+            ["gpt-4.1"]       = new(tokenLimit: 1_047_576, encoding: Gpt4oEncoding),
             ["gpt-4o"]        = new(tokenLimit: 128_000, encoding: Gpt4oEncoding),
             ["gpt-4"]         = new(tokenLimit: 8_192),
             ["gpt-4-32k"]     = new(tokenLimit: 32_768),
@@ -45,7 +48,7 @@ internal class ModelInfo
         };
     }
 
-    private ModelInfo(int tokenLimit, string encoding = null)
+    private ModelInfo(int tokenLimit, string encoding = null, bool reasoning = false)
     {
         TokenLimit = tokenLimit;
         _encodingName = encoding ?? Gpt34Encoding;
@@ -54,6 +57,7 @@ internal class ModelInfo
         // See https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
         TokensPerMessage = 3;
         TokensPerName = 1;
+        Reasoning = reasoning;
     }
 
     private readonly string _encodingName;
@@ -62,6 +66,7 @@ internal class ModelInfo
     internal int TokenLimit { get; }
     internal int TokensPerMessage { get; }
     internal int TokensPerName { get; }
+    internal bool Reasoning { get; }
     internal Tokenizer Encoding
     {
         get {

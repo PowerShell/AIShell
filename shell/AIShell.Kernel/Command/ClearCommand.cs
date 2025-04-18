@@ -6,10 +6,10 @@ namespace AIShell.Kernel.Commands;
 internal sealed class ClearCommand : CommandBase
 {
     public ClearCommand()
-        : base("cls", "Clear the screen.")
+        : base("clear", "Clear the screen.")
     {
         this.SetHandler(ClearAction);
-        this.AddAlias("clear");
+        this.AddAlias("cls");
     }
 
     private void ClearAction()

@@ -58,15 +58,12 @@ internal class CommandRunner
             command.Shell = _shell;
             command.Source = agentName;
 
+            // The 'command.Name' is included in the 'command.Aliases' collection.
             // TODO: need to think about how to handle command names/aliases collision.
             // We don't handle collision today -- it will throw when collision happens.
-            _commands.Add(command.Name, command);
             foreach (string alias in command.Aliases)
             {
-                if (!string.IsNullOrWhiteSpace(alias))
-                {
-                    _commands.Add(alias, command);
-                }
+                _commands.Add(alias, command);
             }
         }
     }
@@ -89,14 +86,11 @@ internal class CommandRunner
 
         foreach (var command in agentCommands)
         {
+            // The 'command.Name' is included in the 'command.Aliases' collection.
             // TODO: need to update accordingly when we handle command names/aliases collision.
-            _commands.Remove(command.Name);
             foreach (string alias in command.Aliases)
             {
-                if (!string.IsNullOrWhiteSpace(alias))
-                {
-                    _commands.Remove(alias);
-                }
+                _commands.Remove(alias);
             }
 
             command.Dispose();

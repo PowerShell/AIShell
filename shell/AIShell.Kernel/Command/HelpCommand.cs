@@ -17,7 +17,7 @@ internal sealed class HelpCommand : CommandBase
         var host = shellImpl.Host;
 
         var commands = shellImpl.CommandRunner.Commands;
-        var list = commands.Values.Order(new CommandComparer()).ToList();
+        var list = commands.Values.Distinct().Order(new CommandComparer()).ToList();
 
         host.WriteLine();
         host.MarkupLine("[bold white]-[/] Type then press [bold olive underline]Enter[/] to chat with the chosen AI agent.");

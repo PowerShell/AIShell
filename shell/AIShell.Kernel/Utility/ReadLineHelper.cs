@@ -201,6 +201,12 @@ internal class ReadLineHelper : IReadLineHelper
 
         foreach (var a in _shell.Agents)
         {
+            if (ReferenceEquals(a, _shell.ActiveAgent))
+            {
+                // Skip the current active agent.
+                continue;
+            }
+
             string agentName = a.Impl.Name;
             if (agentName.StartsWith(targetName, StringComparison.OrdinalIgnoreCase))
             {

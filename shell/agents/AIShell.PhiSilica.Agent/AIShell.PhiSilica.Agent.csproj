@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <OutputType>Library</OutputType>
+	  <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+	  <ImplicitUsings>enable</ImplicitUsings>
+	  <Nullable>enable</Nullable>
+	  <Platforms>AnyCPU</Platforms>
+	  <WindowsPackageType>None</WindowsPackageType>
+	  <EnableDynamicLoading>true</EnableDynamicLoading>
+	  <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
+	  <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+	  <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+      <EnableMsixTooling>true</EnableMsixTooling>
+
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\AIShell.Abstraction\AIShell.Abstraction.csproj">
+      <!-- Disable copying AIShell.Abstraction.dll to output folder -->
+      <Private>false</Private>
+      <!-- Disable copying the transitive dependencies to output folder -->
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250410001-experimental1" />
+  </ItemGroup>
+
+</Project>

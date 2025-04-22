@@ -95,6 +95,7 @@ function Install-AIShellApp {
 
     if (-not $destinationExists) {
         # Create the directory if not existing.
+        Write-Host "Creating the target folder '$destination' ..."
         if ($IsWindows) {
             $null = New-Item -Path $destination -ItemType Directory -Force
         } else {

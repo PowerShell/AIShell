@@ -204,13 +204,12 @@ function Uninstall-AIShellApp {
 }
 
 function Install-AIShellModule {
-    if ($IsWindows) {
-        $modVersion = $Script:ModuleVersion
-        Write-Host "Installing the PowerShell module 'AIShell' $modVersion ..."
-        Install-PSResource -Name AIShell -Repository PSGallery -Prerelease -TrustRepository -Version $modVersion -ErrorAction Stop -WarningAction SilentlyContinue
-    } else {
-        Write-Host -ForegroundColor Yellow "Currently the AIShell PowerShell module will only work in iTerm2 terminal and still has limited support but if you would like to test it, you can install it with 'Install-PSResource -Name AIShell -Repository PSGallery -Prerelease'."
-        Write-Host -ForegroundColor Yellow "The AI Shell app has been added to your path, please run 'aish' to use the standalone experience."
+    $modVersion = $Script:ModuleVersion
+    Write-Host "Installing the PowerShell module 'AIShell' $modVersion ..."
+    Install-PSResource -Name AIShell -Repository PSGallery -Prerelease -TrustRepository -Version $modVersion -ErrorAction Stop -WarningAction SilentlyContinue
+
+    if ($IsMacOS) {
+        Write-Host -ForegroundColor Yellow "NOTE: The 'AIShell' PowerShell module only works in iTerm2 terminal in order to provide the sidecar experience."
     }
 }
 
@@ -237,12 +236,16 @@ if ($Uninstall) {
     Uninstall-AIShellApp
     Uninstall-AIShellModule
 
-    $message = $IsWindows ? "AI Shell App and PowerShell module have" : "AI Shell App has"
-    Write-Host "`n$message been successfully uninstalled." -ForegroundColor Green
+    Write-Host -ForegroundColor Green "`nAI Shell App and PowerShell module have been successfully uninstalled."
 } else {
     Install-AIShellApp
     Install-AIShellModule
 
-    $message = $IsWindows ? "'Start-AIShell'" : "'aish'"
-    Write-Host "`nInstallation succeeded.`nTo learn more about AI Shell please visit https://aka.ms/AIShell-Docs.`nTo get started please run $message to start AI Shell." -ForegroundColor Green
+    $condition = $IsMacOS ? " if you are in iTerm2" : $null
+    Write-Host -ForegroundColor Green -Object @"
+
+Installation succeeded.
+To learn more about AI Shell please visit https://aka.ms/AIShell-Docs.
+To get started, please run 'Start-AIShell' to use the sidecar experience${condition}, or run 'aish' to use the standalone experience.
+"@
 }

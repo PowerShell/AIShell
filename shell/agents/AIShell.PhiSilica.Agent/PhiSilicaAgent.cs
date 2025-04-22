@@ -4,7 +4,7 @@ using Microsoft.Windows.AI.Generative;
 using AIShell.Abstraction;
 using Microsoft.Windows.AI;
 
-namespace phisilicaagent_041825
+namespace AIShell.PhiSilica.Agent
 {
     public class PhiSilicaAgent : ILLMAgent
     {

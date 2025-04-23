@@ -1,14 +1,12 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using AIShell.Abstraction;
 using OllamaSharp;
 using OllamaSharp.Models;
 
 namespace AIShell.Ollama.Agent;
 
-public sealed partial class OllamaAgent : ILLMAgent
+public sealed class OllamaAgent : ILLMAgent
 {
     private bool _reloadSettings;
     private bool _isDisposed;

@@ -20,11 +20,21 @@ To configure the agent, run `/agent config ollama` to open up the setting file i
     // 2. Start Ollama API server: `ollama serve`
     // 3. Install Ollama model: `ollama pull phi3`
 
-    // Declare Ollama model
-    "Model": "phi3",
+    // Declare predefined model configurations
+    "Presets": [
+        {
+            "Name": "PowerShell Expert",
+            "Description": "A ollama agent with expertise in PowerShell scripting and command line utilities.",
+            "ModelName": "phi3",
+            "SystemPrompt": "You are a helpful and friendly assistant with expertise in PowerShell scripting and command line."
+        }
+    ],
+
     // Declare Ollama endpoint
     "Endpoint": "http://localhost:11434",
     // Enable Ollama streaming
-    "Stream": false
+    "Stream": false,
+    // Specify the default preset to use
+    "DefaultPreset": "PowerShell Expert"
 }
 ```

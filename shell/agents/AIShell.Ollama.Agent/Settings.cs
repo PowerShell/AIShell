@@ -52,9 +52,14 @@ internal partial class Settings
             return true;
         }
 
-        if (!PerformSelfcheck(host))
+        // Skip the self check when host is null.
+        if (host is not null)
         {
-            return false;
+            bool success = await PerformSelfcheck(host, checkEndpointOnly: true);
+            if (!success)
+            {
+                return false;
+            }
         }
 
         using OllamaApiClient client = new(Endpoint);
@@ -77,6 +82,7 @@ internal partial class Settings
     internal void EnsureModelNameIsValid(string name)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
+
         if (!_availableModels.Contains(name.AddLatestTagIfNecessery()))
         {
             throw new InvalidOperationException($"A model with the name '{name}' doesn't exist. The available models are: [{string.Join(", ", _availableModels)}].");
@@ -94,7 +100,7 @@ internal partial class Settings
     }
 
     private static List<IRenderElement<string>> GetRenderModelElements(Func<string, bool> isActive) => [
-        new CustomElement<string>(label: "Model Name", m => m),
+        new CustomElement<string>(label: "Name", m => m),
         new CustomElement<string>(label: "Active", m => isActive(m) ? "true" : string.Empty)
     ];
 
@@ -165,64 +171,50 @@ internal partial class Settings
             ]);
     }
 
-    internal async Task<string> GetActiveModel(IHost host, CancellationToken cancellationToken = default)
+    internal async Task<bool> PerformSelfcheck(IHost host, bool checkEndpointOnly = false)
     {
-        if (_runningConfigChecked is false)
-        {
-            if (await EnsureModelsInitialized(host, cancellationToken).ConfigureAwait(false))
-            {
-                if (string.IsNullOrEmpty(RunningConfig.ModelName))
-                {
-                    // There is no model set, so use the first one available.
-                    if (_availableModels.Count == 0)
-                    {
-                        throw new InvalidOperationException($"No models are available to use from '{Endpoint}'.");
-                    }
-
-                    RunningConfig = RunningConfig with { ModelName = _availableModels.First() };
-                    host.MarkupLine($"No Ollama model is configured. Using the first available model [green]'{RunningConfig.ModelName}'[/].");
-                }
-                else
-                {
-                    EnsureModelNameIsValid(RunningConfig.ModelName);
-                }
-
-                _runningConfigChecked = true;
-            }
-            else    
-            {
-                throw new InvalidOperationException($"Error initializing models from '{Endpoint}'.");
-            }
-        }
-
-        return RunningConfig.ModelName;
-    }
-
-    internal bool PerformSelfcheck(IHost host)
-    {
-        if (_isRunningLocalHost is null)
-        {
-            var endpointUri = new Uri(Endpoint);
-            _isRunningLocalHost = IsLocalHost().IsMatch(endpointUri.Host);
-        }
+        _isRunningLocalHost ??= IsLocalHost().IsMatch(new Uri(Endpoint).Host);
 
         if (_isRunningLocalHost is true && Process.GetProcessesByName("ollama").Length is 0)
         {
-            var message = "Please be sure the Ollama is installed and server is running. Check all the prerequisites in the README of this agent are met.";
-            if (host is null)
+            host.WriteErrorLine("Please be sure the Ollama is installed and server is running. Check all the prerequisites in the README of this agent are met.");
+            return false;
+        }
+
+        if (!checkEndpointOnly && !_runningConfigChecked)
+        {
+            await EnsureModelsInitialized(host: null).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(RunningConfig.ModelName))
             {
-                throw new InvalidOperationException(message);
+                // There is no model set, so use the first one available.
+                if (_availableModels.Count is 0)
+                {
+                    host.WriteErrorLine($"No models are available to use from '{Endpoint}'.");
+                    return false;
+                }
+
+                RunningConfig = RunningConfig with { ModelName = _availableModels.First() };
+                host.MarkupLine($"No Ollama model is configured. Using the first available model [green]'{RunningConfig.ModelName}'[/].");
             }
             else
             {
-                host.WriteErrorLine(message);
-                return false;
+                try
+                {
+                    EnsureModelNameIsValid(RunningConfig.ModelName);
+                }
+                catch (InvalidOperationException e)
+                {
+                    host.WriteErrorLine(e.Message);
+                    return false;
+                }
             }
+
+            _runningConfigChecked = true;
         }
 
         return true;
     }
-    
+
     /// <summary>
     /// Defines a generated regular expression to match localhost addresses
     /// "localhost", "127.0.0.1" and "[::1]" with case-insensitivity.
@@ -286,5 +278,6 @@ internal partial class SourceGenerationContext : JsonSerializerContext { }
 
 static class TagExtensions
 {
-    public static string AddLatestTagIfNecessery(this string model) => model.IndexOf(":") == -1 ? string.Concat(model, ":latest") : model;
+    public static string AddLatestTagIfNecessery(this string model) =>
+        model.Contains(':') ? model : string.Concat(model, ":latest");
 }

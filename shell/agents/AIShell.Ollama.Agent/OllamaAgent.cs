@@ -170,21 +170,22 @@ public sealed partial class OllamaAgent : ILLMAgent
         // Reload the setting file if needed.
         ReloadSettings();
 
-        if (!_settings.PerformSelfcheck(host))
+        bool success = await _settings.PerformSelfcheck(host);
+        if (!success)
         {
             return false;
         }
 
-        var activeModel = await _settings.GetActiveModel(host).ConfigureAwait(false);
+        ModelConfig config = _settings.RunningConfig;
 
         // Prepare request
         _request.Prompt = input;
-        _request.Model = activeModel;
+        _request.Model = config.ModelName;
         _request.Stream = _settings.Stream;
 
-        if (!string.IsNullOrWhiteSpace(_settings.RunningConfig.SystemPrompt))
+        if (!string.IsNullOrWhiteSpace(config.SystemPrompt))
         {
-            _request.System = _settings.RunningConfig.SystemPrompt;
+            _request.System = config.SystemPrompt;
         }
 
         try
@@ -249,7 +250,7 @@ public sealed partial class OllamaAgent : ILLMAgent
         catch (HttpRequestException e)
         {
             host.WriteErrorLine($"{e.Message}");
-            host.WriteErrorLine($"Ollama active model: \"{activeModel}\"");
+            host.WriteErrorLine($"Ollama active model: \"{config.ModelName}\"");
             host.WriteErrorLine($"Ollama endpoint:     \"{_settings.Endpoint}\"");
             host.WriteErrorLine($"Ollama settings:     \"{SettingFile}\"");
         }

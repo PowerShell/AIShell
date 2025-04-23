@@ -89,11 +89,11 @@ internal sealed class PresetCommand : CommandBase
         try
         {
             ModelConfig chosenPreset = (string.IsNullOrEmpty(name)
-                ? host.PromptForSelectionAsync(
+                ? await host.PromptForSelectionAsync(
                     title: "[orange1]Please select a [Blue]Preset[/] to use[/]:",
                     choices: setting.Presets,
                     converter: PresetName,
-                    CancellationToken.None).GetAwaiter().GetResult()
+                    CancellationToken.None)
                 : setting.Presets.FirstOrDefault(c => c.Name == name)) ?? throw new InvalidOperationException($"The preset '{name}' doesn't exist.");
             await setting.UsePreset(host, chosenPreset);
             host.MarkupLine($"Using the preset [green]{chosenPreset.Name}[/]:");
@@ -155,7 +155,7 @@ internal sealed class SystemPromptCommand : CommandBase
         }
         catch (InvalidOperationException ex)
         {
-            host.WriteErrorLine($"{ex.Message}");
+            host.WriteErrorLine(ex.Message);
         }
     }
 
@@ -181,7 +181,7 @@ internal sealed class SystemPromptCommand : CommandBase
         }
         catch (InvalidOperationException ex)
         {
-            host.WriteErrorLine($"{ex.Message}.");
+            host.WriteErrorLine(ex.Message);
         }
     }
 }
@@ -215,7 +215,7 @@ internal sealed class ModelCommand : CommandBase
         AddCommand(use);
     }
 
-    private void ListModelAction(string name)
+    private async Task ListModelAction(string name)
     {
         IHost host = Shell.Host;
 
@@ -233,11 +233,11 @@ internal sealed class ModelCommand : CommandBase
         {
             if (string.IsNullOrEmpty(name))
             {
-                settings.ListAllModels(host).GetAwaiter().GetResult();
+                await settings.ListAllModels(host);
                 return;
             }
 
-            settings.ShowOneModel(host, name).GetAwaiter().GetResult();
+            await settings.ShowOneModel(host, name);
         }
         catch (InvalidOperationException ex)
         {
@@ -245,7 +245,7 @@ internal sealed class ModelCommand : CommandBase
         }
     }
 
-    private void UseModelAction(string name)
+    private async Task UseModelAction(string name)
     {
         // Reload the setting file if needed.
         _agnet.ReloadSettings();
@@ -261,26 +261,28 @@ internal sealed class ModelCommand : CommandBase
 
         try
         {
-            if (!settings.PerformSelfcheck(host))
+            bool success = await settings.PerformSelfcheck(host, checkEndpointOnly: true);
+            if (!success)
             {
                 return;
             }
 
-            if (settings.GetAllModels().GetAwaiter().GetResult().Count is 0)
+            var allModels = await settings.GetAllModels();
+            if (allModels.Count is 0)
             {
-                host.WriteErrorLine("No models found.");
+                host.WriteErrorLine($"No models found from '{settings.Endpoint}'.");
                 return;
             }
 
             if (string.IsNullOrEmpty(name))
             {
-                name = host.PromptForSelectionAsync(
+                name = await host.PromptForSelectionAsync(
                     title: "[orange1]Please select a [Blue]Model[/] to use[/]:",
-                    choices: settings.GetAllModels(host).GetAwaiter().GetResult(),
-                    CancellationToken.None).GetAwaiter().GetResult();
+                    choices: allModels,
+                    CancellationToken.None);
             }
 
-            settings.UseModel(host, name).GetAwaiter().GetResult();
+            await settings.UseModel(host: null, name);
             host.MarkupLine($"Using the model [green]{name}[/]");
         }
         catch (InvalidOperationException ex)

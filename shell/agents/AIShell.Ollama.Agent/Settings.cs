@@ -48,7 +48,7 @@ internal partial class Settings
     /// <summary>
     /// Retrieve available models from the Ollama endpoint.
     /// </summary>
-    /// <param name="host">Used for writing error to host when it's a local endpoint but the Ollama server is not started. The endpoint check will be skipped if a `null` is specified.</param>
+    /// <param name="host">Used for writing error to host when it's a local endpoint but the Ollama server is not started. When the value is null, the endpoint check will be skipped.</param>
     /// <param name="cancellationToken">Used for cancel the operation.</param>
     /// <returns></returns>
     private async Task<bool> EnsureModelsInitialized(IHost host, CancellationToken cancellationToken = default)
@@ -60,7 +60,7 @@ internal partial class Settings
 
         // The endpoint check is supposed to be interactive and can be skipped in some cases, such as when
         // the `PerformSelfcheck` method was already called right before entering this method.
-        // So, we will simply skip the endpoint check when the passed-in host is null. If there's something
+        // So, we will simply skip the endpoint check when the passed-in host is null. If there's anything
         // wrong with the endpoint, the subsequent calls to retrieve models will fail and throw anyway.
         if (host is not null)
         {

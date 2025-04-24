@@ -59,7 +59,7 @@ internal sealed class PresetCommand : CommandBase
 
             settings.ShowOnePreset(host, name);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             string availablePresetNames = PresetNamesAsString();
             host.WriteErrorLine($"{ex.Message} Available preset(s): {availablePresetNames}.");
@@ -98,7 +98,7 @@ internal sealed class PresetCommand : CommandBase
             await setting.UsePreset(host, chosenPreset);
             host.MarkupLine($"Using the preset [green]{chosenPreset.Name}[/]:");
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             string availablePresetNames = PresetNamesAsString();
             host.WriteErrorLine($"{ex.Message} Available presets: {availablePresetNames}.");
@@ -153,7 +153,7 @@ internal sealed class SystemPromptCommand : CommandBase
         {
             settings.ShowSystemPrompt(host);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             host.WriteErrorLine(ex.Message);
         }
@@ -179,7 +179,7 @@ internal sealed class SystemPromptCommand : CommandBase
         {
             settings.SetSystemPrompt(host, prompt);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             host.WriteErrorLine(ex.Message);
         }
@@ -239,7 +239,7 @@ internal sealed class ModelCommand : CommandBase
 
             await settings.ShowOneModel(host, name);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             host.WriteErrorLine(ex.Message);
         }
@@ -282,14 +282,28 @@ internal sealed class ModelCommand : CommandBase
                     CancellationToken.None);
             }
 
-            await settings.UseModel(host: null, name);
+            await settings.UseModel(host, name);
             host.MarkupLine($"Using the model [green]{name}[/]");
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             host.WriteErrorLine(ex.Message);
         }
     }
 
-    private IEnumerable<string> ModelNameCompleter(CompletionContext context) => _agnet.Settings?.GetAllModels().GetAwaiter().GetResult() ?? [];
+    private IEnumerable<string> ModelNameCompleter(CompletionContext context)
+    {
+        try
+        {
+            // Model retrieval may throw.
+            var results = _agnet.Settings?.GetAllModels().Result;
+            if (results is not null)
+            {
+                return results;
+            }
+        }
+        catch (Exception) { }
+
+        return [];
+    }
 }

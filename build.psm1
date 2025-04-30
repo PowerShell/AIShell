@@ -53,7 +53,7 @@ function Start-Build
     }
 
     if (HasUnapplicableAgent $AgentToInclude) {
-        throw "One or more specified agents cannot be built on the current platform: $($windowsOnlyAgents -join ', ').`nPlease skip them and try again."
+        throw "The following specified agent(s) cannot be built on the current platform: $($windowsOnlyAgents -join ', ')."
     }
 
     $RID = $Runtime ?? (dotnet --info |

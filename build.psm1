@@ -6,6 +6,7 @@
 $metadata = Get-Content $PSScriptRoot/tools/metadata.json | ConvertFrom-Json
 $dotnetSDKVersion = $(Get-Content $PSScriptRoot/global.json | ConvertFrom-Json).Sdk.Version
 $dotnetLocalDir = if ($IsWindows) { "$env:LocalAppData\Microsoft\dotnet" } else { "$env:HOME/.dotnet" }
+$windowsOnlyAgents = @('phisilica')
 
 function Start-Build
 {
@@ -43,11 +44,16 @@ function Start-Build
             $MyInvocation.MyCommand.Parameters["AgentToInclude"].Attributes |
                 Where-Object { $_ -is [ValidateSet] } |
                 Select-Object -First 1 |
-                ForEach-Object ValidValues
+                ForEach-Object ValidValues |
+                Skip-Unapplicable
         } else {
             $agents.Split(",", [System.StringSplitOptions]::TrimEntries)
             Write-Verbose "Include agents specified in Metadata.json"
         }
+    }
+
+    if (HasUnapplicableAgent $AgentToInclude) {
+        throw "One or more specified agents cannot be built on the current platform: $($windowsOnlyAgents -join ', ').`nPlease skip them and try again."
     }
 
     $RID = $Runtime ?? (dotnet --info |
@@ -181,6 +187,26 @@ function Start-Build
             Write-Host "(copied to clipboard)`n" -ForegroundColor Cyan
         }
     }
+}
+
+filter Skip-Unapplicable {
+    if ($IsWindows -or $windowsOnlyAgents -notcontains $_) {
+        $_
+    }
+}
+
+function HasUnapplicableAgent($specifiedAgents) {
+    if ($IsWindows) {
+        return $false
+    }
+
+    foreach ($agent in $windowsOnlyAgents) {
+        if ($specifiedAgents -contains $agent) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function GetProjectFile($dir)

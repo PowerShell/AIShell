@@ -10,7 +10,7 @@ public sealed partial class PhiSilicaAgent : ILLMAgent
     private LanguageModel _model;
 
     public string Name => "PhiSilica";
-    public string Description => "This is the Phi Silica agent, an offline local agent on Copilot+ PCs";
+    public string Description => "This is the AI Shell Agent for talking to the inbox Phi Silica model on Copilot+ PCs.";
     public string SettingFile => null;
 
     public IEnumerable<CommandBase> GetCommands() => null;

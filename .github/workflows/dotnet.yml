@@ -20,7 +20,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.406
+        dotnet-version: 8.0.409
     - name: Build
       shell: pwsh
       run: |
@@ -37,7 +37,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.406
+        dotnet-version: 8.0.409
     - name: Build
       shell: pwsh
       run: |
@@ -54,7 +54,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.406
+        dotnet-version: 8.0.409
     - name: Build
       shell: pwsh
       run: |

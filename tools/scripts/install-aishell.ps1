@@ -19,6 +19,8 @@ $Script:WinInstallationLocation = "$env:LOCALAPPDATA\Programs\AIShell"
 $Script:InstallLocation = $null
 $Script:PackageURL = $null
 $Script:ModuleVersion = $null
+$Script:NewPSRLInstalled = $false
+$Script:PSRLDependencyMap = @{ '1.0.4-preview4' = '2.4.2-beta2' }
 
 function Resolve-Environment {
     if ($PSVersionTable.PSVersion -lt [version]"7.4.6") {
@@ -209,6 +211,18 @@ function Install-AIShellModule {
     Write-Host "Installing the PowerShell module 'AIShell' $modVersion ..."
     Install-PSResource -Name AIShell -Repository PSGallery -Prerelease -TrustRepository -Version $modVersion -ErrorAction Stop -WarningAction SilentlyContinue
 
+    $psrldep = $Script:PSRLDependencyMap[$modVersion]
+    if ($psrldep) {
+        $psrlModule = Get-Module -Name PSReadLine
+        $psrlVer = $psrldep.Contains('-') ? $psrldep.Split('-')[0] : $psrldep
+        if ($null -eq $psrlModule -or $psrlModule.Version -lt [version]$psrlVer) {
+            Write-Host "  - This version of AIShell module depends on PSReadLine '$psrldep', which is missing."
+            Write-Host "    Installing the PowerShell module 'PSReadLine' $psrldep ..."
+            Install-PSResource -Name PSReadLine -Repository PSGallery -Prerelease -TrustRepository -Version $psrldep -ErrorAction Stop -WarningAction SilentlyContinue
+            $Script:NewPSRLInstalled = $true
+        }
+    }
+
     if ($IsMacOS) {
         Write-Host -ForegroundColor Yellow "NOTE: The 'AIShell' PowerShell module only works in iTerm2 terminal in order to provide the sidecar experience."
     }
@@ -249,4 +263,10 @@ Installation succeeded.
 To learn more about AI Shell please visit https://aka.ms/AIShell-Docs.
 To get started, please run 'Start-AIShell' to use the sidecar experience${condition}, or run 'aish' to use the standalone experience.
 "@
+    if ($Script:NewPSRLInstalled) {
+        Write-Host -ForegroundColor Yellow -Object @"
+NOTE: A new version of the PSReadLine module was installed as a dependency.
+To ensure the new PSReadLine gets used, please run 'Start-AIShell' from a new session.
+"@
+    }
 }

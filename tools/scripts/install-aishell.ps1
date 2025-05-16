@@ -216,9 +216,9 @@ function Install-AIShellModule {
         $psrlModule = Get-Module -Name PSReadLine
         $psrlVer = $psrldep.Contains('-') ? $psrldep.Split('-')[0] : $psrldep
         if ($null -eq $psrlModule -or $psrlModule.Version -lt [version]$psrlVer) {
-            Write-Host "  - This version of AIShell module depends on PSReadLine '$psrldep', which is missing."
-            Write-Host "    Installing the PowerShell module 'PSReadLine' $psrldep ..."
-            Install-PSResource -Name PSReadLine -Repository PSGallery -Prerelease -TrustRepository -Version $psrldep -ErrorAction Stop -WarningAction SilentlyContinue
+            Write-Host "  - This version of AIShell module depends on PSReadLine '$psrldep' or higher, which is missing."
+            Write-Host "    Installing the PowerShell module 'PSReadLine' $psrldep or a higher version ..."
+            Install-PSResource -Name PSReadLine -Repository PSGallery -Prerelease -TrustRepository -Version "[$psrldep, ]" -ErrorAction Stop -WarningAction SilentlyContinue
             $Script:NewPSRLInstalled = $true
         }
     }

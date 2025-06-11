@@ -18,7 +18,7 @@ internal sealed class PresetCommand : CommandBase
         var usePreset = new Argument<string>(
             name: "Preset",
             getDefaultValue: () => null,
-            description: "Name of a preset.").AddCompletions(PresetNameCompleter);
+            description: "Name of a preset.");
         use.AddArgument(usePreset);
         use.SetHandler(UsePresetAction, usePreset);
 
@@ -26,7 +26,7 @@ internal sealed class PresetCommand : CommandBase
         var listPreset = new Argument<string>(
             name: "Preset",
             getDefaultValue: () => null,
-            description: "Name of a preset.").AddCompletions(PresetNameCompleter);
+            description: "Name of a preset.");
         list.AddArgument(listPreset);
         list.SetHandler(ListPresetAction, listPreset);
 
@@ -199,7 +199,7 @@ internal sealed class ModelCommand : CommandBase
         var useModel = new Argument<string>(
             name: "Model",
             getDefaultValue: () => null,
-            description: "Name of a model.").AddCompletions(ModelNameCompleter);
+            description: "Name of a model.");
         use.AddArgument(useModel);
         use.SetHandler(UseModelAction, useModel);
 
@@ -207,7 +207,7 @@ internal sealed class ModelCommand : CommandBase
         var listModel = new Argument<string>(
             name: "Model",
             getDefaultValue: () => null,
-            description: "Name of a model.").AddCompletions(ModelNameCompleter);
+            description: "Name of a model.");
         list.AddArgument(listModel);
         list.SetHandler(ListModelAction, listModel);
 
@@ -291,19 +291,4 @@ internal sealed class ModelCommand : CommandBase
         }
     }
 
-    private IEnumerable<string> ModelNameCompleter(CompletionContext context)
-    {
-        try
-        {
-            // Model retrieval may throw.
-            var results = _agnet.Settings?.GetAllModels().Result;
-            if (results is not null)
-            {
-                return results;
-            }
-        }
-        catch (Exception) { }
-
-        return [];
-    }
 }

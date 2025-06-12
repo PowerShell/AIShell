@@ -19,7 +19,7 @@ internal class Setting
             try
             {
                 using var stream = file.OpenRead();
-                return JsonSerializer.Deserialize(stream, SourceGenerationContext.Default.Setting);
+                return JsonSerializer.Deserialize(stream, AppSettingJsonContext.Default.Setting);
             }
             catch (Exception e)
             {
@@ -48,4 +48,4 @@ internal class Setting
     ReadCommentHandling = JsonCommentHandling.Skip,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(Setting))]
-internal partial class SourceGenerationContext : JsonSerializerContext { }
+internal partial class AppSettingJsonContext : JsonSerializerContext { }

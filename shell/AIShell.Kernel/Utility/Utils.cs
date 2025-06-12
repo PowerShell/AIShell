@@ -46,6 +46,7 @@ internal static class Utils
     internal static string ConfigHome;
     internal static string AppCacheDir;
     internal static string AppConfigFile;
+    internal static string AppMcpFile;
     internal static string AgentHome;
     internal static string AgentConfigHome;
 
@@ -59,6 +60,7 @@ internal static class Utils
         ConfigHome = Path.Combine(locationPath, $".{AppName.Replace(' ', '-')}");
         AppCacheDir = Path.Combine(ConfigHome, ".cache");
         AppConfigFile = Path.Combine(ConfigHome, "config.json");
+        AppMcpFile = Path.Combine(ConfigHome, "mcp.json");
         AgentHome = Path.Join(ConfigHome, "agents");
         AgentConfigHome = Path.Join(ConfigHome, "agent-config");
 

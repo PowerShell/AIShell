@@ -74,6 +74,11 @@ internal sealed class Shell : IShell
     /// </summary>
     internal LLMAgent ActiveAgent => _activeAgent;
 
+    /// <summary>
+    /// Gets the version from the assembly attribute.
+    /// </summary>
+    internal string Version => _version;
+
     #region IShell implementation
 
     IHost IShell.Host => Host;

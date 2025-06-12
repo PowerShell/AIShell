@@ -2,9 +2,12 @@
 using System.Text;
 
 using AIShell.Abstraction;
+using AIShell.Kernel.Mcp;
 using Markdig.Helpers;
 using Microsoft.PowerShell;
 using Spectre.Console;
+using Spectre.Console.Json;
+using Spectre.Console.Rendering;
 
 namespace AIShell.Kernel;
 
@@ -550,15 +553,59 @@ internal sealed class Host : IHost
     internal void RenderReferenceText(string header, string content)
     {
         RequireStdoutOrStderr(operation: "Render reference");
+        IAnsiConsole ansiConsole = _outputRedirected ? _stderrConsole : AnsiConsole.Console;
 
         var panel = new Panel($"\n[italic]{content.EscapeMarkup()}[/]\n")
             .RoundedBorder()
             .BorderColor(Color.DarkCyan)
             .Header($"[orange3 on italic] {header.Trim()} [/]");
 
-        AnsiConsole.WriteLine();
-        AnsiConsole.Write(panel);
-        AnsiConsole.WriteLine();
+        ansiConsole.WriteLine();
+        ansiConsole.Write(panel);
+        ansiConsole.WriteLine();
+    }
+
+    /// <summary>
+    /// Render the MCP tool call request.
+    /// </summary>
+    /// <param name="tool">The MCP tool.</param>
+    /// <param name="jsonArgs">The arguments in JSON form to be sent for the tool call.</param>
+    internal void RenderToolCallRequest(McpTool tool, string jsonArgs)
+    {
+        RequireStdoutOrStderr(operation: "render tool call request");
+        IAnsiConsole ansiConsole = _outputRedirected ? _stderrConsole : AnsiConsole.Console;
+
+        bool hasArgs = !string.IsNullOrEmpty(jsonArgs);
+        IRenderable content = new Markup($"""
+
+            [bold]Run [olive]{tool.OriginalName}[/] from [olive]{tool.ServerName}[/] (MCP server)[/]
+
+            {tool.Description}
+
+            Input:{(hasArgs ? string.Empty : "<Empty>")}
+            """);
+
+        if (hasArgs)
+        {
+            var json = new JsonText(jsonArgs)
+                .MemberColor(Color.Aqua)
+                .ColonColor(Color.White)
+                .CommaColor(Color.White)
+                .StringStyle(Color.Tan);
+
+            content = new Grid()
+                .AddColumn(new GridColumn())
+                .AddRow(content)
+                .AddRow(json);
+        }
+
+        var panel = new Panel(content)
+            .Expand()
+            .RoundedBorder()
+            .Header("[green]  Tool Call Request  [/]")
+            .BorderColor(Color.Grey);
+
+        ansiConsole.Write(panel);
     }
 
     private static Spinner GetSpinner(SpinnerKind? kind)

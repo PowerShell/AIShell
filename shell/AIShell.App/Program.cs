@@ -27,6 +27,7 @@ internal class Program
         Argument<string> query = new("query", getDefaultValue: () => null, "The query term used to get response from AI.");
         Option<string> channel = new("--channel", "A named pipe used to setup communication between aish and the command-line shell.");
         Option<FileInfo> shellWrapper = new("--shell-wrapper", "Path to the configuration file to wrap AIShell as a different application.");
+        Option<string> agent = new(["--agent", "-a"], "The AI agent to use for this session.");
 
         query.AddValidator(result =>
         {
@@ -38,12 +39,12 @@ internal class Program
             }
         });
 
-        RootCommand rootCommand = new("AI for the command line.") { query, channel, shellWrapper };
-        rootCommand.SetHandler(StartShellAsync, query, channel, shellWrapper);
+        RootCommand rootCommand = new("AI for the command line.") { query, channel, shellWrapper, agent };
+        rootCommand.SetHandler(StartShellAsync, query, channel, shellWrapper, agent);
         return rootCommand.Invoke(args);
     }
 
-    private async static Task StartShellAsync(string query, string channel, FileInfo shellWrapperConfigFile)
+    private async static Task StartShellAsync(string query, string channel, FileInfo shellWrapperConfigFile, string agent)
     {
         if (!ReadShellWrapperConfig(shellWrapperConfigFile, out ShellWrapper shellWrapper))
         {
@@ -51,7 +52,7 @@ internal class Program
         }
 
         Utils.Setup(shellWrapper?.Name);
-        ShellArgs args = new(shellWrapper, channel);
+        ShellArgs args = new(shellWrapper, channel, agent);
 
         Shell shell;
         if (query is not null)

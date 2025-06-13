@@ -72,8 +72,14 @@ Agent README files:
 - [`interpreter`][07]
 - [`azure`][17] (shipped with AI Shell)
 
-When you run `aish`, you are prompted to choose an agent. For more details about each agent, see the
-README in the each agent folder.
+When you run `aish`, you are prompted to choose an agent. You can also specify an agent directly using the `--agent` or `-a` parameter:
+
+```bash
+aish --agent openai-gpt
+aish -a azure
+```
+
+For more details about each agent, see the README in the each agent folder.
 
 To learn more about how to create an agent for yourself please see, [Creating an Agent][03].
 
@@ -120,9 +126,18 @@ key bindings will be supported in future releases.
 
 ### Configuration
 
-Currently, AI Shell supports very basic configuration. One can creates a file named `config.json`
-under `~/.aish` to configure AI Shell, but it only supports declaring the default agent to use at
-startup. This way you do not need to select agents every time you run `aish.exe`
+Currently, AI Shell supports very basic configuration. You can specify which agent to use in several ways:
+
+1. **Command line parameter** (highest priority): `aish --agent openai-gpt` or `aish -a azure`
+2. **Configuration file**: Create a file named `config.json` under `~/.aish` to declare the default agent:
+
+```json
+{
+  "DefaultAgent": "openai-gpt"
+}
+```
+
+This way you do not need to select agents every time you run `aish.exe`
 
 Configuration of AI Shell will be improved in future releases to support custom key bindings, color
 themes and more.

@@ -277,7 +277,9 @@ internal sealed class Shell : IShell
 
                 if (chosenAgent is null)
                 {
-                    Host.MarkupWarningLine($"The specified agent '{active}' is not available.\n");
+                    string source = !string.IsNullOrEmpty(_commandLineAgent) ? "command line" :
+                                   !string.IsNullOrEmpty(_wrapper?.Agent) ? "wrapper configuration" : "default configuration";
+                    Host.MarkupWarningLine($"The {source} agent '{active}' is not available.\n");
                 }
                 else if (_wrapper?.Prompt is not null)
                 {

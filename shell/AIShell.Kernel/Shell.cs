@@ -14,6 +14,7 @@ internal sealed class Shell : IShell
     private readonly ShellWrapper _wrapper;
     private readonly HashSet<string> _textToIgnore;
     private readonly Setting _setting;
+    private readonly string _commandLineAgent;
 
     private bool _shouldRefresh;
     private LLMAgent _activeAgent;
@@ -90,6 +91,7 @@ internal sealed class Shell : IShell
     {
         _isInteractive = interactive;
         _wrapper = args.ShellWrapper;
+        _commandLineAgent = args.Agent;
 
         // Create the channel if the args is specified.
         // The channel object starts the connection initialization on a background thread,
@@ -261,7 +263,7 @@ internal sealed class Shell : IShell
         try
         {
             LLMAgent chosenAgent = null;
-            string active = _wrapper?.Agent ?? _setting.DefaultAgent;
+            string active = _commandLineAgent ?? _wrapper?.Agent ?? _setting.DefaultAgent;
             if (!string.IsNullOrEmpty(active))
             {
                 foreach (LLMAgent agent in _agents)
@@ -275,7 +277,7 @@ internal sealed class Shell : IShell
 
                 if (chosenAgent is null)
                 {
-                    Host.MarkupWarningLine($"The configured active agent '{active}' is not available.\n");
+                    Host.MarkupWarningLine($"The specified agent '{active}' is not available.\n");
                 }
                 else if (_wrapper?.Prompt is not null)
                 {

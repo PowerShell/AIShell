@@ -25,7 +25,14 @@ internal class AgentAssemblyLoadContext : AssemblyLoadContext
         _dependencyDir = dependencyDir;
         _runtimeLibDir = [];
         _runtimeNativeDir = [];
-        _cache = [];
+        _cache = new()
+        {
+            // Contracts exposed from 'AIShell.Abstraction' depend on these assemblies,
+            // so agents have to depend on the same assemblies from the default ALC.
+            // Otherwise, the contracts will break due to mis-match type identities.
+            ["System.CommandLine"] = null,
+            ["Microsoft.Extensions.AI.Abstractions"] = null,
+        };
 
         if (OperatingSystem.IsWindows())
         {

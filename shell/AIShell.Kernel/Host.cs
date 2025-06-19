@@ -582,7 +582,7 @@ internal sealed class Host : IHost
 
             {tool.Description}
 
-            Input:{(hasArgs ? string.Empty : "<Empty>")}
+            Input:{(hasArgs ? string.Empty : " <none>")}
             """);
 
         if (hasArgs)
@@ -605,7 +605,9 @@ internal sealed class Host : IHost
             .Header("[green]  Tool Call Request  [/]")
             .BorderColor(Color.Grey);
 
+        ansiConsole.WriteLine();
         ansiConsole.Write(panel);
+        FancyStreamRender.ConsoleUpdated();
     }
 
     private static Spinner GetSpinner(SpinnerKind? kind)

@@ -1,5 +1,4 @@
-﻿
-using Microsoft.Extensions.AI;
+﻿using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
@@ -53,11 +52,11 @@ internal class McpManager
     /// Lists tools that are available at the time of the call.
     /// Servers that are still initializing or failed will be skipped.
     /// </summary>
-    internal async Task<List<McpTool>> ListAvailableTools()
+    internal async Task<List<AIFunction>> ListAvailableTools()
     {
         await _initTask;
 
-        List<McpTool> tools = null;
+        List<AIFunction> tools = null;
         foreach (var (name, server) in _mcpServers)
         {
             if (server.IsOperational)
@@ -86,7 +85,7 @@ internal class McpManager
         string serverName = null, toolName = null;
 
         string functionName = functionCall.Name;
-        int dotIndex = functionName.IndexOf('.');
+        int dotIndex = functionName.IndexOf(McpTool.ServerToolSeparator);
         if (dotIndex > 0)
         {
             serverName = functionName[..dotIndex];

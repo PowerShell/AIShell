@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OllamaSharp" Version="4.0.8" />
+    <PackageReference Include="OllamaSharp" Version="5.2.2" />
   </ItemGroup>
 
   <ItemGroup>

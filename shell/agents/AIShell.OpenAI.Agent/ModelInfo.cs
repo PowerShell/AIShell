@@ -1,5 +1,3 @@
-using Microsoft.ML.Tokenizers;
-
 namespace AIShell.OpenAI.Agent;
 
 internal class ModelInfo
@@ -11,7 +9,6 @@ internal class ModelInfo
     private const string Gpt34Encoding = "cl100k_base";
 
     private static readonly Dictionary<string, ModelInfo> s_modelMap;
-    private static readonly Dictionary<string, Task<Tokenizer>> s_encodingMap;
 
     // A rough estimate to cover all third-party models.
     //  - most popular models today support 32K+ context length;
@@ -37,21 +34,12 @@ internal class ModelInfo
             // Azure naming of the 'gpt-3.5-turbo' models
             ["gpt-35-turbo"]  = new(tokenLimit: 16_385),
         };
-
-        // The first call to 'GptEncoding.GetEncoding' is very slow, taking about 2 seconds on my machine.
-        // We don't immediately need the encodings at the startup, so by getting the values in tasks,
-        // we don't block the startup and the values will be ready when we really need them.
-        s_encodingMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            [Gpt34Encoding] = Task.Run(() => (Tokenizer)TiktokenTokenizer.CreateForEncoding(Gpt34Encoding)),
-            [Gpt4oEncoding] = Task.Run(() => (Tokenizer)TiktokenTokenizer.CreateForEncoding(Gpt4oEncoding))
-        };
     }
 
     private ModelInfo(int tokenLimit, string encoding = null, bool reasoning = false)
     {
         TokenLimit = tokenLimit;
-        _encodingName = encoding ?? Gpt34Encoding;
+        EncodingName = encoding ?? Gpt34Encoding;
 
         // For gpt4o, gpt4 and gpt3.5-turbo, the following 2 properties are the same.
         // See https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
@@ -60,22 +48,11 @@ internal class ModelInfo
         Reasoning = reasoning;
     }
 
-    private readonly string _encodingName;
-    private Tokenizer _gptEncoding;
-
+    internal string EncodingName { get; }
     internal int TokenLimit { get; }
     internal int TokensPerMessage { get; }
     internal int TokensPerName { get; }
     internal bool Reasoning { get; }
-    internal Tokenizer Encoding
-    {
-        get {
-            _gptEncoding ??= s_encodingMap.TryGetValue(_encodingName, out Task<Tokenizer> value)
-                ? value.Result
-                : TiktokenTokenizer.CreateForEncoding(_encodingName);
-            return _gptEncoding;
-        }
-    }
 
     /// <summary>
     /// Try resolving the specified model name.

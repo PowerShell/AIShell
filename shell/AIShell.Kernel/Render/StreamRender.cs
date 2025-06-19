@@ -38,32 +38,49 @@ internal sealed partial class FancyStreamRender : IStreamRender
     internal const char ESC = '\x1b';
     internal static readonly Regex AnsiRegex = CreateAnsiRegex();
 
+    private static int s_consoleUpdateFlag = 0;
+
+    private readonly int _bufferWidth, _bufferHeight;
     private readonly MarkdownRender _markdownRender;
     private readonly StringBuilder _buffer;
     private readonly CancellationToken _cancellationToken;
 
-    private string _currentText;
-    private int _bufferWidth, _bufferHeight;
+    private int _localFlag;
     private Point _initialCursor;
+    private string _currentText;
     private string _accumulatedContent;
+    private List<string> _previousContents;
 
     internal FancyStreamRender(MarkdownRender markdownRender, CancellationToken token)
     {
-        _currentText = string.Empty;
         _bufferWidth = Console.BufferWidth;
         _bufferHeight = Console.BufferHeight;
-        _initialCursor = new(Console.CursorLeft, Console.CursorTop);
-
         _markdownRender = markdownRender;
         _buffer = new StringBuilder();
         _cancellationToken = token;
-        _accumulatedContent = string.Empty;
+
+        _localFlag = s_consoleUpdateFlag;
+        _initialCursor = new(Console.CursorLeft, Console.CursorTop);
+        _accumulatedContent = _currentText = string.Empty;
+        _previousContents = null;
 
         // Hide the cursor when rendering the streaming response.
         Console.CursorVisible = false;
     }
 
-    public string AccumulatedContent => _accumulatedContent;
+    public string AccumulatedContent
+    {
+        get
+        {
+            if (_previousContents is null)
+            {
+                return _accumulatedContent;
+            }
+
+            _previousContents.Add(_accumulatedContent);
+            return string.Concat(_previousContents);
+        }
+    }
 
     public List<CodeBlock> CodeBlocks
     {
@@ -72,7 +89,7 @@ internal sealed partial class FancyStreamRender : IStreamRender
             // Create a new list to return, so as to prevent agents from changing
             // the list that is used internally by 'CodeBlockVisitor'.
             var blocks = _markdownRender.GetAllCodeBlocks();
-            return blocks is null ? null : new List<CodeBlock>(blocks);
+            return blocks is null ? null : [.. blocks];
         }
     }
 
@@ -92,6 +109,22 @@ internal sealed partial class FancyStreamRender : IStreamRender
     {
         // Avoid rendering the new chunk up on cancellation.
         _cancellationToken.ThrowIfCancellationRequested();
+
+        // The host wrote out something while this stream render is active.
+        // We need to reset the state of this stream render in this case.
+        if (_localFlag < s_consoleUpdateFlag)
+        {
+            _localFlag = s_consoleUpdateFlag;
+            _initialCursor = new(Console.CursorLeft, Console.CursorTop);
+            Console.CursorVisible = false;
+
+            if (_buffer.Length > 0)
+            {
+                (_previousContents ??= []).Add(_accumulatedContent);
+                _accumulatedContent = _currentText = string.Empty;
+                _buffer.Clear();
+            }
+        }
 
         _buffer.Append(newChunk);
         _accumulatedContent = _buffer.ToString();
@@ -306,6 +339,23 @@ internal sealed partial class FancyStreamRender : IStreamRender
         }
 
         return new Point(x, y);
+    }
+
+    /// <summary>
+    /// Call this method to report writing to console from outside the stream render.
+    /// </summary>
+    /// <remarks>
+    /// With the MCP tool calls, we may need to render the tool call request while a stream render is active.
+    /// This method is used to notify an active stream render about updates in console from elsewhere, so the
+    /// stream render can reset its state and start freshly.
+    /// Note that, a stream render and the host won't really write to console in parallel. But it is possible
+    /// that the stream render wrote some output and stoped, and then the host wrote some other output. Since
+    /// the stream render depends on the initial cursor position to refresh all content when new chunks coming
+    /// in, it needs to reset its state in such a case, so that it can continue to work correctly afterwards.
+    /// </remarks>
+    internal static void ConsoleUpdated()
+    {
+        s_consoleUpdateFlag++;
     }
 }
 

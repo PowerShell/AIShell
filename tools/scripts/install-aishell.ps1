@@ -1,6 +1,46 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+<#
+.SYNOPSIS
+    Installs or uninstalls AI Shell.
+
+.DESCRIPTION
+    This script installs the AI Shell application and PowerShell module from GitHub releases.
+    It can also configure AI Shell to auto-start when PowerShell is launched in Windows Terminal.
+
+.PARAMETER Version
+    Specify the version to install, e.g. 'v1.0.0-preview.2'
+
+.PARAMETER AddToProfile
+    Automatically add AI Shell to PowerShell profile for auto-start without prompting.
+    Only works on Windows. When used, AI Shell will start automatically when PowerShell
+    is opened in Windows Terminal.
+
+.PARAMETER DefaultAgent
+    Default agent to use when auto-starting AI Shell. Must be used with -AddToProfile.
+    Valid agent names include: openai, ollama, azure, interpreter, phisilica.
+    If not specified, AI Shell will prompt for agent selection at startup.
+
+.PARAMETER Uninstall
+    Specify this parameter to uninstall AI Shell and remove it from the PowerShell profile.
+
+.EXAMPLE
+    .\install-aishell.ps1
+    Installs AI Shell and prompts for profile integration.
+
+.EXAMPLE
+    .\install-aishell.ps1 -AddToProfile -DefaultAgent openai
+    Installs AI Shell and automatically configures it to start with the OpenAI agent.
+
+.EXAMPLE
+    .\install-aishell.ps1 -Uninstall
+    Uninstalls AI Shell and removes it from the PowerShell profile.
+
+.LINK
+    https://aka.ms/AIShell-Docs
+#>
+
 #Requires -Version 7.4.6
 
 [CmdletBinding(DefaultParameterSetName = "Install")]
@@ -285,6 +325,16 @@ function Add-AIShellToProfile {
         return
     }
     
+    # Validate and sanitize the agent name
+    if ($DefaultAgent) {
+        # Remove any potentially dangerous characters and validate
+        $DefaultAgent = $DefaultAgent -replace '[^a-zA-Z0-9\-_\.]', ''
+        if ([string]::IsNullOrWhiteSpace($DefaultAgent)) {
+            Write-Warning "Invalid agent name provided. AI Shell will use default agent selection."
+            $DefaultAgent = $null
+        }
+    }
+    
     $profilePath = $PROFILE.CurrentUserAllHosts
     $profileDir = Split-Path $profilePath -Parent
     
@@ -297,16 +347,14 @@ function Add-AIShellToProfile {
     $aiShellSectionStart = "# AI Shell Auto-Start - BEGIN (Added by AIShell installer)"
     $aiShellSectionEnd = "# AI Shell Auto-Start - END (Added by AIShell installer)"
     
+    $agentParameter = if ($DefaultAgent) { " -Agent '$DefaultAgent'" } else { "" }
+    
     $aiShellCode = @"
 $aiShellSectionStart
 # Auto-start AI Shell sidecar if in Windows Terminal
 if (`$env:WT_SESSION -and (Get-Command Start-AIShell -ErrorAction SilentlyContinue)) {
     try {
-        if ('$DefaultAgent') {
-            Start-AIShell -Agent '$DefaultAgent'
-        } else {
-            Start-AIShell
-        }
+        Start-AIShell$agentParameter
     } catch {
         Write-Warning "Failed to auto-start AI Shell: `$_"
     }
@@ -340,6 +388,9 @@ $aiShellSectionEnd
     try {
         Set-Content -Path $profilePath -Value $newContent -ErrorAction Stop
         Write-Host "Successfully added AI Shell auto-start to PowerShell profile: $profilePath"
+        if ($DefaultAgent) {
+            Write-Host "  Default agent: $DefaultAgent"
+        }
     }
     catch {
         Write-Error "Failed to update PowerShell profile: $_"

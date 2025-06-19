@@ -9,6 +9,12 @@ param(
     [ValidatePattern("^v\d+\.\d+\.\d+(-\w+\.\d{1,2})?$")]
     [string] $Version,
 
+    [Parameter(HelpMessage = "Automatically add AI Shell to PowerShell profile for auto-start", ParameterSetName = "Install")]
+    [switch] $AddToProfile,
+
+    [Parameter(HelpMessage = "Default agent to use when auto-starting AI Shell", ParameterSetName = "Install")]
+    [string] $DefaultAgent,
+
     [Parameter(HelpMessage = "Specify this parameter to uninstall AI Shell", ParameterSetName = "Uninstall")]
     [switch] $Uninstall
 )
@@ -239,6 +245,215 @@ function Uninstall-AIShellModule {
     }
 }
 
+function Get-AvailableAgents {
+    # Try to get available agents by importing the module temporarily
+    try {
+        Import-Module AIShell -Force -ErrorAction Stop
+        
+        # Get available agents by running Start-AIShell briefly and capturing output
+        # Since we can't easily enumerate agents without starting the shell,
+        # we'll provide a list of common known agents
+        $knownAgents = @(
+            @{ Name = "openai"; Description = "OpenAI GPT models" }
+            @{ Name = "ollama"; Description = "Ollama local models" }
+            @{ Name = "azure"; Description = "Azure OpenAI Service" }
+            @{ Name = "interpreter"; Description = "Code interpreter agent" }
+            @{ Name = "phisilica"; Description = "Phi Silica agent" }
+        )
+        
+        Remove-Module AIShell -Force -ErrorAction SilentlyContinue
+        return $knownAgents
+    }
+    catch {
+        # If module import fails, return basic known agents
+        Write-Warning "Could not enumerate agents dynamically. Using known agent list."
+        return @(
+            @{ Name = "openai"; Description = "OpenAI GPT models" }
+            @{ Name = "ollama"; Description = "Ollama local models" }
+        )
+    }
+}
+
+function Add-AIShellToProfile {
+    [CmdletBinding()]
+    param(
+        [string] $DefaultAgent
+    )
+    
+    if (-not $IsWindows) {
+        Write-Warning "Profile integration is currently only supported on Windows."
+        return
+    }
+    
+    $profilePath = $PROFILE.CurrentUserAllHosts
+    $profileDir = Split-Path $profilePath -Parent
+    
+    # Create profile directory if it doesn't exist
+    if (-not (Test-Path $profileDir)) {
+        New-Item -Path $profileDir -ItemType Directory -Force | Out-Null
+    }
+    
+    # Define the AI Shell auto-start section with unique markers
+    $aiShellSectionStart = "# AI Shell Auto-Start - BEGIN (Added by AIShell installer)"
+    $aiShellSectionEnd = "# AI Shell Auto-Start - END (Added by AIShell installer)"
+    
+    $aiShellCode = @"
+$aiShellSectionStart
+# Auto-start AI Shell sidecar if in Windows Terminal
+if (`$env:WT_SESSION -and (Get-Command Start-AIShell -ErrorAction SilentlyContinue)) {
+    try {
+        if ('$DefaultAgent') {
+            Start-AIShell -Agent '$DefaultAgent'
+        } else {
+            Start-AIShell
+        }
+    } catch {
+        Write-Warning "Failed to auto-start AI Shell: `$_"
+    }
+}
+$aiShellSectionEnd
+"@
+    
+    # Read existing profile content
+    $existingContent = ""
+    if (Test-Path $profilePath) {
+        $existingContent = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
+        
+        # Check if AI Shell section already exists
+        if ($existingContent -match [regex]::Escape($aiShellSectionStart)) {
+            Write-Host "AI Shell auto-start section already exists in profile. Updating..."
+            # Remove existing section
+            $pattern = [regex]::Escape($aiShellSectionStart) + ".*?" + [regex]::Escape($aiShellSectionEnd)
+            $existingContent = [regex]::Replace($existingContent, $pattern, "", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            $existingContent = $existingContent.Trim()
+        }
+    }
+    
+    # Add the new AI Shell section
+    $newContent = if ($existingContent) {
+        $existingContent + "`n`n" + $aiShellCode
+    } else {
+        $aiShellCode
+    }
+    
+    # Write to profile
+    try {
+        Set-Content -Path $profilePath -Value $newContent -ErrorAction Stop
+        Write-Host "Successfully added AI Shell auto-start to PowerShell profile: $profilePath"
+    }
+    catch {
+        Write-Error "Failed to update PowerShell profile: $_"
+    }
+}
+
+function Remove-AIShellFromProfile {
+    [CmdletBinding()]
+    param()
+    
+    if (-not $IsWindows) {
+        return  # Profile integration only supported on Windows
+    }
+    
+    $profilePath = $PROFILE.CurrentUserAllHosts
+    
+    if (-not (Test-Path $profilePath)) {
+        return  # No profile file exists
+    }
+    
+    try {
+        $existingContent = Get-Content $profilePath -Raw -ErrorAction Stop
+        
+        # Define the markers
+        $aiShellSectionStart = "# AI Shell Auto-Start - BEGIN (Added by AIShell installer)"
+        $aiShellSectionEnd = "# AI Shell Auto-Start - END (Added by AIShell installer)"
+        
+        # Check if AI Shell section exists
+        if ($existingContent -match [regex]::Escape($aiShellSectionStart)) {
+            Write-Host "Removing AI Shell auto-start from PowerShell profile..."
+            
+            # Remove the AI Shell section
+            $pattern = [regex]::Escape($aiShellSectionStart) + ".*?" + [regex]::Escape($aiShellSectionEnd)
+            $newContent = [regex]::Replace($existingContent, $pattern, "", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            $newContent = $newContent.Trim()
+            
+            # Write back to profile
+            if ($newContent) {
+                Set-Content -Path $profilePath -Value $newContent -ErrorAction Stop
+            } else {
+                # If profile is now empty, remove the file
+                Remove-Item $profilePath -ErrorAction Stop
+            }
+            
+            Write-Host "Successfully removed AI Shell auto-start from PowerShell profile."
+        }
+    }
+    catch {
+        Write-Warning "Failed to remove AI Shell from PowerShell profile: $_"
+    }
+}
+
+function Prompt-ProfileIntegration {
+    [CmdletBinding()]
+    param()
+    
+    if (-not $IsWindows) {
+        Write-Host "Profile integration is only available on Windows."
+        return $false
+    }
+    
+    Write-Host ""
+    Write-Host -ForegroundColor Cyan "AI Shell Profile Integration"
+    Write-Host "Would you like to automatically start AI Shell when you open PowerShell in Windows Terminal?"
+    Write-Host "This will add code to your PowerShell profile (`$PROFILE) to launch the AI Shell sidecar."
+    Write-Host ""
+    
+    do {
+        $response = Read-Host "Add AI Shell to your PowerShell profile? (y/N)"
+        $response = $response.Trim().ToLower()
+    } while ($response -notin @('', 'y', 'yes', 'n', 'no'))
+    
+    return ($response -in @('y', 'yes'))
+}
+
+function Prompt-DefaultAgent {
+    [CmdletBinding()]
+    param()
+    
+    Write-Host ""
+    Write-Host -ForegroundColor Cyan "Default Agent Selection"
+    Write-Host "Which agent would you like to use by default when AI Shell starts?"
+    Write-Host ""
+    
+    $agents = Get-AvailableAgents
+    
+    # Display available agents
+    for ($i = 0; $i -lt $agents.Count; $i++) {
+        Write-Host "$($i + 1). $($agents[$i].Name) - $($agents[$i].Description)"
+    }
+    Write-Host "$($agents.Count + 1). Let AI Shell choose at startup (recommended)"
+    Write-Host ""
+    
+    do {
+        $choice = Read-Host "Select an option (1-$($agents.Count + 1))"
+        try {
+            $choiceNum = [int]$choice
+            if ($choiceNum -ge 1 -and $choiceNum -le ($agents.Count + 1)) {
+                break
+            }
+        }
+        catch {
+            # Invalid input, continue loop
+        }
+        Write-Host "Please enter a number between 1 and $($agents.Count + 1)."
+    } while ($true)
+    
+    if ($choiceNum -eq ($agents.Count + 1)) {
+        return $null  # Let AI Shell choose at startup
+    } else {
+        return $agents[$choiceNum - 1].Name
+    }
+}
+
 <###################################
 #
 #           Setup/Execute
@@ -250,11 +465,32 @@ Resolve-Environment
 if ($Uninstall) {
     Uninstall-AIShellApp
     Uninstall-AIShellModule
+    Remove-AIShellFromProfile
 
     Write-Host -ForegroundColor Green "`nAI Shell App and PowerShell module have been successfully uninstalled."
 } else {
     Install-AIShellApp
     Install-AIShellModule
+
+    # Handle profile integration
+    $shouldAddToProfile = $false
+    $selectedAgent = $null
+    
+    if ($AddToProfile) {
+        # Non-interactive mode: use the provided default agent
+        $shouldAddToProfile = $true
+        $selectedAgent = $DefaultAgent
+    } else {
+        # Interactive mode: prompt user for consent and agent selection
+        if (Prompt-ProfileIntegration) {
+            $shouldAddToProfile = $true
+            $selectedAgent = Prompt-DefaultAgent
+        }
+    }
+    
+    if ($shouldAddToProfile) {
+        Add-AIShellToProfile -DefaultAgent $selectedAgent
+    }
 
     $condition = $IsMacOS ? " if you are in iTerm2" : $null
     Write-Host -ForegroundColor Green -Object @"
@@ -267,6 +503,13 @@ To get started, please run 'Start-AIShell' to use the sidecar experience${condit
         Write-Host -ForegroundColor Yellow -Object @"
 NOTE: A new version of the PSReadLine module was installed as a dependency.
 To ensure the new PSReadLine gets used, please run 'Start-AIShell' from a new session.
+"@
+    }
+    
+    if ($shouldAddToProfile) {
+        Write-Host -ForegroundColor Yellow -Object @"
+NOTE: AI Shell has been added to your PowerShell profile for auto-start in Windows Terminal.
+You can remove this by running the install script with -Uninstall.
 "@
     }
 }

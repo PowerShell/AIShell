@@ -178,7 +178,7 @@ internal sealed class Host : IHost
     /// <inheritdoc/>
     public void RenderTable<T>(IList<T> sources)
     {
-        RequireStdoutOrStderr(operation: "render table");
+        RequireStdout(operation: "render table");
         ArgumentNullException.ThrowIfNull(sources);
 
         if (sources.Count is 0)
@@ -201,7 +201,7 @@ internal sealed class Host : IHost
     /// <inheritdoc/>
     public void RenderTable<T>(IList<T> sources, IList<IRenderElement<T>> elements)
     {
-        RequireStdoutOrStderr(operation: "render table");
+        RequireStdout(operation: "render table");
 
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(elements);
@@ -243,7 +243,7 @@ internal sealed class Host : IHost
     /// <inheritdoc/>
     public void RenderList<T>(T source)
     {
-        RequireStdoutOrStderr(operation: "render list");
+        RequireStdout(operation: "render list");
         ArgumentNullException.ThrowIfNull(source);
 
         if (source is IDictionary<string, string> dict)
@@ -274,7 +274,7 @@ internal sealed class Host : IHost
     /// <inheritdoc/>
     public void RenderList<T>(T source, IList<IRenderElement<T>> elements)
     {
-        RequireStdoutOrStderr(operation: "render list");
+        RequireStdout(operation: "render list");
 
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(elements);
@@ -316,7 +316,7 @@ internal sealed class Host : IHost
     public void RenderDivider(string text, DividerAlignment alignment)
     {
         ArgumentException.ThrowIfNullOrEmpty(text);
-        RequireStdoutOrStderr(operation: "render divider");
+        RequireStdout(operation: "render divider");
 
         if (!text.Contains("[/]"))
         {
@@ -610,6 +610,75 @@ internal sealed class Host : IHost
         FancyStreamRender.ConsoleUpdated();
     }
 
+    internal void RenderMcpServersAndTools(McpManager mcpManager)
+    {
+        RequireStdout(operation: "render MCP servers and tools");
+
+        var toolTable = new Table()
+            .LeftAligned()
+            .SimpleBorder()
+            .BorderColor(Color.Green);
+
+        toolTable.AddColumn("[green bold]Server[/]");
+        toolTable.AddColumn("[green bold]Tool[/]");
+        toolTable.AddColumn("[green bold]Description[/]");
+
+        List<(string name, string status, string info)> readyServers = null, startingServers = null, failedServers = null;
+        foreach (var (name, server) in mcpManager.McpServers)
+        {
+            (int code, string status, string info) = server.IsInitFinished
+                ? server.Error is null
+                    ? (1, "[green]\u2713 Ready[/]", string.Empty)
+                    : (-1, "[red]\u2717 Failed[/]", $"[red]{server.Error.Message.EscapeMarkup()}[/]")
+                : (0, "[yellow]\u25CB Starting[/]", string.Empty);
+
+            var list = code switch
+            {
+                1 => readyServers ??= [],
+                0 => startingServers ??= [],
+                _ => failedServers ??= [],
+            };
+
+            list.Add((name, status, info));
+        }
+
+        if (startingServers is not null)
+        {
+            foreach (var (name, status, info) in startingServers)
+            {
+                toolTable.AddRow($"[olive underline]{name}[/]", status, info);
+            }
+        }
+
+        if (failedServers is not null)
+        {
+            foreach (var (name, status, info) in failedServers)
+            {
+                toolTable.AddRow($"[olive underline]{name}[/]", status, info);
+            }
+        }
+
+        if (readyServers is not null)
+        {
+            foreach (var (name, status, info) in readyServers)
+            {
+                if (toolTable.Rows is { Count: > 0 })
+                {
+                    toolTable.AddEmptyRow();
+                }
+
+                var server = mcpManager.McpServers[name];
+                toolTable.AddRow($"[olive underline]{name}[/]", status, info);
+                foreach (var item in server.Tools)
+                {
+                    toolTable.AddRow(string.Empty, item.Key.EscapeMarkup(), item.Value.Description.EscapeMarkup());
+                }
+            }
+        }
+
+        AnsiConsole.Write(toolTable);
+    }
+
     private static Spinner GetSpinner(SpinnerKind? kind)
     {
         return kind switch
@@ -629,6 +698,19 @@ internal sealed class Host : IHost
         if (_inputRedirected)
         {
             throw new InvalidOperationException($"Cannot {operation} when stdin is redirected.");
+        }
+    }
+
+    /// <summary>
+    /// Throw exception if standard output is redirected.
+    /// </summary>
+    /// <param name="operation">The intended operation.</param>
+    /// <exception cref="InvalidOperationException">Throw the exception if stdout is redirected.</exception>
+    private void RequireStdout(string operation)
+    {
+        if (_outputRedirected)
+        {
+            throw new InvalidOperationException($"Cannot {operation} when the stdout is redirected.");
         }
     }
 

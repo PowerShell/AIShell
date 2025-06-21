@@ -6,15 +6,23 @@ namespace AIShell.Kernel.Mcp;
 
 internal class McpManager
 {
+    private readonly Task _initTask;
     private readonly McpServerInitContext _context;
     private readonly Dictionary<string, McpServer> _mcpServers;
-
-    private readonly Task _initTask;
     private readonly TaskCompletionSource<McpConfig> _parseMcpJsonTaskSource;
 
     private McpConfig _mcpConfig;
 
     internal Task<McpConfig> ParseMcpJsonTask => _parseMcpJsonTaskSource.Task;
+
+    internal Dictionary<string, McpServer> McpServers
+    {
+        get
+        {
+            _initTask.Wait();
+            return _mcpServers;
+        }
+    }
 
     internal McpManager(Shell shell)
     {

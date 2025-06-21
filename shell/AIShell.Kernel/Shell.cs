@@ -82,6 +82,11 @@ internal sealed class Shell : IShell
     /// </summary>
     internal string Version => _version;
 
+    /// <summary>
+    /// Gets the MCP manager.
+    /// </summary>
+    internal McpManager McpManager => _mcpManager;
+
     #region IShell implementation
 
     IHost IShell.Host => Host;

@@ -127,18 +127,27 @@ internal class ChatService
 
         _client = client.AsIChatClient()
             .AsBuilder()
-            .UseFunctionInvocation()
+            .UseFunctionInvocation(configure: c => c.IncludeDetailedErrors = true)
             .Build();
     }
 
     private void PrepareForChat(string input)
     {
+        const string Guidelines = """
+            ## Tool Use Guidelines
+            You may have access to external tools.
+            Before making any tool call, you must first explain the reason for using the tool. Only issue the tool call after providing this explanation.
+
+            ## Other Guidelines
+            """;
+
         // Refresh the client in case the active model was changed.
         RefreshOpenAIClient();
 
         if (_chatHistory.Count is 0)
         {
-            _chatHistory.Add(new(ChatRole.System, _gptToUse.SystemPrompt));
+            string system = $"{Guidelines}\n{_gptToUse.SystemPrompt}";
+            _chatHistory.Add(new(ChatRole.System, system));
         }
 
         _chatHistory.Add(new(ChatRole.User, input));

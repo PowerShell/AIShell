@@ -91,7 +91,10 @@ internal class McpServer : IDisposable
             _client = await McpClientFactory.CreateAsync(transport, _context.ClientOptions);
 
             var serverInfo = _client.ServerInfo;
-            _serverInfo = $"{serverInfo.Name} {serverInfo.Version}";
+            // An MCP server may have the name included in the version info.
+            _serverInfo = serverInfo.Version.Contains(serverInfo.Name, StringComparison.OrdinalIgnoreCase)
+                ? serverInfo.Version
+                : $"{serverInfo.Name} {serverInfo.Version}";
 
             await foreach (McpClientTool tool in _client.EnumerateToolsAsync())
             {

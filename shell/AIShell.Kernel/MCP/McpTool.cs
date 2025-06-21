@@ -122,7 +122,7 @@ internal class McpTool : AIFunction
 
         if (choice is "Cancel")
         {
-            _host.MarkupLine($"\n    [red]\u2717[/] Cancelled '{OriginalName}'\n");
+            _host.MarkupLine($"\n    [red]\u2717[/] Cancelled '{OriginalName}'");
             throw new OperationCanceledException("The call was rejected by user.");
         }
 

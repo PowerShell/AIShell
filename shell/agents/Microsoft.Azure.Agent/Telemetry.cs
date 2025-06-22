@@ -204,7 +204,7 @@ internal class Telemetry
             .AddApplicationInsightsTelemetryWorkerService((ApplicationInsightsServiceOptions options) =>
                 {
                     // Application insights in the AME environment.
-                    options.ConnectionString = "InstrumentationKey=6378fd21-6e8d-4192-9714-0b776babff23";
+                    options.ConnectionString = "InstrumentationKey=7a75c4d0-ae0b-4a63-9fb3-b99271f79537";
                     options.EnableHeartbeat = false;
                     options.EnableDiagnosticsTelemetryModule = false;
                 });

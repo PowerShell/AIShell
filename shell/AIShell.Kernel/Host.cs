@@ -610,6 +610,10 @@ internal sealed class Host : IHost
         FancyStreamRender.ConsoleUpdated();
     }
 
+    /// <summary>
+    /// Render a table with information about available MCP servers and tools.
+    /// </summary>
+    /// <param name="mcpManager">The MCP manager instance.</param>
     internal void RenderMcpServersAndTools(McpManager mcpManager)
     {
         RequireStdout(operation: "render MCP servers and tools");

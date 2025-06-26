@@ -25,7 +25,8 @@ public class Channel : IDisposable
     private readonly object _psrlSingleton;
     private readonly ManualResetEvent _connSetupWaitHandler;
     private readonly Predictor _predictor;
-    private readonly ScriptBlock _onIdleAction;
+    private readonly ScriptBlock _onIdlePostAction;
+    private readonly ScriptBlock _onIdleRunAction;
     private readonly List<HistoryInfo> _commandHistory;
 
     private PathInfo _currentLocation;
@@ -35,6 +36,8 @@ public class Channel : IDisposable
     private Exception _exception;
     private Thread _serverThread;
     private CodePostData _pendingPostCodeData;
+    private RunCommandRequest _runCommandRequest;
+    private PowerShell _pwsh;
 
     private Channel(Runspace runspace, EngineIntrinsics intrinsics, Type psConsoleReadLineType)
     {
@@ -70,7 +73,8 @@ public class Channel : IDisposable
 
         _commandHistory = [];
         _predictor = new Predictor();
-        _onIdleAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdleHandler()");
+        _onIdlePostAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdlePostHandler()");
+        _onIdleRunAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdleRunHandler()");
     }
 
     public static Channel CreateSingleton(Runspace runspace, EngineIntrinsics intrinsics, Type psConsoleReadLineType)
@@ -106,6 +110,29 @@ public class Channel : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// A 'run_command' tool call request will set '_runCommandRequest' properly with the 'Result' property being null.
+    /// For a blocking call, it will set '_runCommandRequest' back to null once the call result has been set.
+    /// For an unblocking call, '_runCommandRequest' will remain as is until:
+    ///   1. a 'get_output' request comes to collect the result, or
+    ///   2. another 'run_command' request comes to run a new command.
+    /// So we consider there is a pending request only if '_runCommandRequest' is not null and its 'Result' property is null.
+    /// </summary>
+    internal string GetRunCommandRequest() =>
+        _runCommandRequest is { Result: null } ? _runCommandRequest.Command : null;
+
+    /// <summary>
+    /// Set the command result for a 'run_command' tool call request.
+    /// </summary>
+    internal void SetRunCommandResult(bool hadErrors, bool userCancelled, List<object> errorAndOutput)
+    {
+        if (_runCommandRequest is { Result: null })
+        {
+            _runCommandRequest.Result = new(hadErrors, userCancelled, errorAndOutput);
+            _runCommandRequest.Event?.Set();
+        }
+    }
+
     public string StartChannelSetup()
     {
         if (_serverPipe is not null)
@@ -123,12 +150,13 @@ public class Channel : IDisposable
         _serverPipe.OnAskConnection += OnAskConnection;
         _serverPipe.OnAskContext += OnAskContext;
         _serverPipe.OnPostCode += OnPostCode;
+        _serverPipe.OnRunCommand += OnRunCommand;
 
         _serverThread = new Thread(ThreadProc)
-            {
-                IsBackground = true,
-                Name = "pwsh channel thread"
-            };
+        {
+            IsBackground = true,
+            Name = "pwsh channel thread"
+        };
 
         _serverThread.Start();
         return _shellPipeName;
@@ -255,6 +283,7 @@ public class Channel : IDisposable
             _serverPipe.OnAskConnection -= OnAskConnection;
             _serverPipe.OnAskContext -= OnAskContext;
             _serverPipe.OnPostCode -= OnPostCode;
+            _serverPipe.OnRunCommand -= OnRunCommand;
         }
 
         _serverPipe = null;
@@ -284,12 +313,23 @@ public class Channel : IDisposable
     }
 
     [Hidden()]
-    public void OnIdleHandler()
+    public void OnIdlePostHandler()
     {
         if (_pendingPostCodeData is not null)
         {
             PSRLInsert(_pendingPostCodeData.CodeToInsert);
             _predictor.SetCandidates(_pendingPostCodeData.PredictionCandidates);
+            _pendingPostCodeData = null;
+        }
+    }
+
+    [Hidden()]
+    public void OnIdleRunHandler()
+    {
+        if (_pendingPostCodeData is not null)
+        {
+            PSRLInsert(_pendingPostCodeData.CodeToInsert);
+            PSRLAcceptLine();
             _pendingPostCodeData = null;
         }
     }
@@ -351,7 +391,7 @@ public class Channel : IDisposable
                 eventName: null,
                 sourceIdentifier: PSEngineEvent.OnIdle,
                 data: null,
-                action: _onIdleAction,
+                action: _onIdlePostAction,
                 supportEvent: true,
                 forwardEvent: false,
                 maxTriggerCount: 1);
@@ -446,6 +486,86 @@ public class Channel : IDisposable
         }
 
         _connSetupWaitHandler.Set();
+    }
+
+    private PostContextMessage OnAskContext(AskContextMessage askContextMessage)
+    {
+        // Not implemented yet.
+        return null;
+    }
+
+    private PostResultMessage OnRunCommand(RunCommandMessage runCommandMessage)
+    {
+        // Ignore 'run_command' request when a code posting operation is on-going.
+        if (_pendingPostCodeData is not null)
+        {
+            return new PostResultMessage(
+                output: "Cannot run command at the moment. Try again later.",
+                hadError: true,
+                userCancelled: false,
+                exception: null);
+        }
+
+        string command = runCommandMessage.Command.Replace("\r\n", "\n");
+        _runCommandRequest = new(command, runCommandMessage.Blocking);
+
+        string codeToInsert = command.Contains('\n')
+            ? $$"""
+                airun {
+                {{command}}
+                }
+                """
+            : $"airun {{ {command} }}";
+
+        // When PSReadLine is actively running, its '_readLineReady' field should be set to 'true'.
+        // When the value is 'false', it means PowerShell is still busy running scripts or commands.
+        if (_psrlReadLineReady.GetValue(_psrlSingleton) is true)
+        {
+            PSRLRevertLine();
+        }
+
+        _pendingPostCodeData = new CodePostData(codeToInsert, null);
+        // We use script block handler instead of a delegate handler because the latter will run
+        // in a background thread, while the former will run in the pipeline thread, which is way
+        // more predictable.
+        _runspace.Events.SubscribeEvent(
+            source: null,
+            eventName: null,
+            sourceIdentifier: PSEngineEvent.OnIdle,
+            data: null,
+            action: _onIdleRunAction,
+            supportEvent: true,
+            forwardEvent: false,
+            maxTriggerCount: 1);
+
+        if (runCommandMessage.Blocking)
+        {
+            // Wait for the call to finish.
+            _runCommandRequest.Event.Wait();
+            RunCommandResult result = _runCommandRequest.Result;
+
+            _pwsh ??= PowerShell.Create();
+            _pwsh.Commands.Clear();
+            string output = result.ErrorAndOutput.Count is 0
+                ? string.Empty
+                : _pwsh.AddCommand("Out-String")
+                    .AddParameter("InputObject", result.ErrorAndOutput)
+                    .AddParameter("Width", 120)
+                    .Invoke<string>()[0];
+
+            PostResultMessage response = new(
+                output: output,
+                hadError: result.HadErrors,
+                userCancelled: result.UserCancelled,
+                exception: null);
+
+            _runCommandRequest.Dispose();
+            _runCommandRequest = null;
+
+            return response;
+        }
+
+        return new PostResultMessage(output: _runCommandRequest.Id, hadError: false, userCancelled: false, exception: null);
     }
 
     private void PSRLInsert(string text)

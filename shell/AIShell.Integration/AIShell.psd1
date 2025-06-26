@@ -10,9 +10,9 @@
     PowerShellVersion = '7.4.6'
     PowerShellHostName = 'ConsoleHost'
     FunctionsToExport = @()
-    CmdletsToExport = @('Start-AIShell','Invoke-AIShell','Resolve-Error')
+    CmdletsToExport = @('Start-AIShell','Invoke-AIShell', 'Invoke-AICommand', 'Resolve-Error')
     VariablesToExport = '*'
-    AliasesToExport = @('aish', 'askai', 'fixit')
+    AliasesToExport = @('aish', 'askai', 'fixit', 'airun')
     HelpInfoURI = 'https://aka.ms/aishell-help'
     PrivateData = @{ PSData = @{ Prerelease = 'preview5'; ProjectUri = 'https://github.com/PowerShell/AIShell' } }
 }

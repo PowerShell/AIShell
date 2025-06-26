@@ -212,6 +212,15 @@ internal class Channel : IDisposable
         return await _clientPipe.AskContext(message, cancellationToken);
     }
 
+    /// <summary>
+    /// Run command in the connected shell.
+    /// </summary>
+    internal async Task<PostResultMessage> RunCommand(RunCommandMessage message, CancellationToken cancellationToken)
+    {
+        ThrowIfNotConnected();
+        return await _clientPipe.RunCommand(message, cancellationToken);
+    }
+
     public void Dispose()
     {
         if (_disposed)

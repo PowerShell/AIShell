@@ -36,6 +36,12 @@ internal sealed class CodeCommand : CommandBase
         copy.SetHandler(CopyAction, nth);
         save.SetHandler(SaveAction, file, append);
         post.SetHandler(PostAction, nth);
+
+        var get = new Command("get", "Post context information.");
+        var ctx = new Argument<string>("context");
+        get.AddArgument(ctx);
+        get.SetHandler(GetAction, ctx);
+        AddCommand(get);
     }
 
     private static string GetCodeText(Shell shell, int index)
@@ -175,6 +181,31 @@ internal sealed class CodeCommand : CommandBase
             shell.Channel.PostCode(new PostCodeMessage(codeToPost));
             host.WriteLine("Code posted to the connected application.");
             shell.OnUserAction(new CodePayload(UserAction.CodePost, string.Join("\n\n", codeToPost)));
+        }
+        catch (Exception e)
+        {
+            host.WriteErrorLine(e.Message);
+        }
+    }
+
+    private async Task GetAction(string context)
+    {
+        var shell = (Shell)Shell;
+        var host = shell.Host;
+
+        if (shell.Channel is null)
+        {
+            host.WriteErrorLine("Cannot get context information because the bi-directional channel was not established.");
+            return;
+        }
+
+        try
+        {
+            var type = Enum.Parse<ContextType>(context);
+            var message = new AskContextMessage(type);
+
+            PostContextMessage response = await shell.Channel.AskContext(message, shell.CancellationToken);
+            host.WriteLine(response.ContextInfo);
         }
         catch (Exception e)
         {

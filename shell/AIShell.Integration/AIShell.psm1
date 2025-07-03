@@ -13,4 +13,4 @@ if ($null -eq $runspace) {
 }
 
 ## Create the channel singleton when loading the module.
-$null = [AIShell.Integration.Channel]::CreateSingleton($runspace, [Microsoft.PowerShell.PSConsoleReadLine])
+$null = [AIShell.Integration.Channel]::CreateSingleton($runspace, $ExecutionContext, [Microsoft.PowerShell.PSConsoleReadLine])

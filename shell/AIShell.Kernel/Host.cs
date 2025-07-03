@@ -662,6 +662,20 @@ internal sealed class Host : IHost
             }
         }
 
+        if (mcpManager.BuiltInTools is { Count: > 0 })
+        {
+            if (toolTable.Rows is { Count: > 0 })
+            {
+                toolTable.AddEmptyRow();
+            }
+
+            toolTable.AddRow($"[olive underline]{McpManager.BuiltInServerName}[/]", "[green]\u2713 Ready[/]", string.Empty);
+            foreach (var item in mcpManager.BuiltInTools)
+            {
+                toolTable.AddRow(string.Empty, item.Key.EscapeMarkup(), item.Value.Description.EscapeMarkup());
+            }
+        }
+
         if (readyServers is not null)
         {
             foreach (var (name, status, info) in readyServers)

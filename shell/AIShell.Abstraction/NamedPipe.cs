@@ -36,6 +36,32 @@ public enum MessageType : int
 }
 
 /// <summary>
+/// Context types that can be requested by AIShell from the connected PowerShell session.
+/// </summary>
+public enum ContextType : int
+{
+    /// <summary>
+    /// Ask for the current working directory of the shell.
+    /// </summary>
+    CurrentLocation = 0,
+
+    /// <summary>
+    /// Ask for the command history of the shell session.
+    /// </summary>
+    CommandHistory = 1,
+
+    /// <summary>
+    /// Ask for the content of the terminal window.
+    /// </summary>
+    TerminalContent = 2,
+
+    /// <summary>
+    /// Ask for the environment variables of the shell session.
+    /// </summary>
+    EnvironmentVariables = 3,
+}
+
+/// <summary>
 /// Base class for all pipe messages.
 /// </summary>
 public abstract class PipeMessage
@@ -109,11 +135,23 @@ public sealed class AskConnectionMessage : PipeMessage
 public sealed class AskContextMessage : PipeMessage
 {
     /// <summary>
+    /// Gets the type of context information requested.
+    /// </summary>
+    public ContextType ContextType { get; }
+
+    /// <summary>
+    /// Gets the argument value associated with the current context query operation.
+    /// </summary>
+    public string[] Arguments { get; }
+
+    /// <summary>
     /// Creates an instance of <see cref="AskContextMessage"/>.
     /// </summary>
-    public AskContextMessage()
+    public AskContextMessage(ContextType contextType, string[] arguments = null)
         : base(MessageType.AskContext)
     {
+        ContextType = contextType;
+        Arguments = arguments ?? null;
     }
 }
 
@@ -125,21 +163,20 @@ public sealed class PostContextMessage : PipeMessage
     /// <summary>
     /// Represents a none instance to be used when the shell has no context information to return.
     /// </summary>
-    public static readonly PostContextMessage None = new([]);
+    public static readonly PostContextMessage None = new(contextInfo: null);
 
     /// <summary>
-    /// Gets the command history.
+    /// Gets the information of the requested context.
     /// </summary>
-    public List<string> CommandHistory { get; }
+    public string ContextInfo { get; }
 
     /// <summary>
     /// Creates an instance of <see cref="PostContextMessage"/>.
     /// </summary>
-    public PostContextMessage(List<string> commandHistory)
+    public PostContextMessage(string contextInfo)
         : base(MessageType.PostContext)
     {
-        ArgumentNullException.ThrowIfNull(commandHistory);
-        CommandHistory = commandHistory;
+        ContextInfo = contextInfo;
     }
 }
 

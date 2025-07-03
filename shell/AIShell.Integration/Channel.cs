@@ -1,9 +1,13 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Management.Automation;
+using System.Management.Automation.Host;
 using System.Management.Automation.Runspaces;
 using AIShell.Abstraction;
+using Microsoft.PowerShell.Commands;
+using System.Text.Json;
 
 namespace AIShell.Integration;
 
@@ -15,13 +19,16 @@ public class Channel : IDisposable
     private readonly string _shellPipeName;
     private readonly Type _psrlType;
     private readonly Runspace _runspace;
+    private readonly EngineIntrinsics _intrinsics;
     private readonly MethodInfo _psrlInsert, _psrlRevertLine, _psrlAcceptLine;
     private readonly FieldInfo _psrlHandleResizing, _psrlReadLineReady;
     private readonly object _psrlSingleton;
     private readonly ManualResetEvent _connSetupWaitHandler;
     private readonly Predictor _predictor;
     private readonly ScriptBlock _onIdleAction;
+    private readonly List<HistoryInfo> _commandHistory;
 
+    private PathInfo _currentLocation;
     private ShellClientPipe _clientPipe;
     private ShellServerPipe _serverPipe;
     private bool? _setupSuccess;
@@ -29,14 +36,18 @@ public class Channel : IDisposable
     private Thread _serverThread;
     private CodePostData _pendingPostCodeData;
 
-    private Channel(Runspace runspace, Type psConsoleReadLineType)
+    private Channel(Runspace runspace, EngineIntrinsics intrinsics, Type psConsoleReadLineType)
     {
         ArgumentNullException.ThrowIfNull(runspace);
         ArgumentNullException.ThrowIfNull(psConsoleReadLineType);
 
         _runspace = runspace;
+        _intrinsics = intrinsics;
         _psrlType = psConsoleReadLineType;
         _connSetupWaitHandler = new ManualResetEvent(false);
+        _currentLocation = _intrinsics.SessionState.Path.CurrentLocation;
+        _runspace.AvailabilityChanged += RunspaceAvailableAction;
+        _intrinsics.InvokeCommand.LocationChangedAction += LocationChangedAction;
 
         _shellPipeName = new StringBuilder(MaxNamedPipeNameSize)
             .Append("pwsh_aish.")
@@ -57,13 +68,14 @@ public class Channel : IDisposable
         _psrlReadLineReady = _psrlType.GetField("_readLineReady", fieldFlags);
         _psrlHandleResizing = _psrlType.GetField("_handlePotentialResizing", fieldFlags);
 
+        _commandHistory = [];
         _predictor = new Predictor();
         _onIdleAction = ScriptBlock.Create("[AIShell.Integration.Channel]::Singleton.OnIdleHandler()");
     }
 
-    public static Channel CreateSingleton(Runspace runspace, Type psConsoleReadLineType)
+    public static Channel CreateSingleton(Runspace runspace, EngineIntrinsics intrinsics, Type psConsoleReadLineType)
     {
-        return Singleton ??= new Channel(runspace, psConsoleReadLineType);
+        return Singleton ??= new Channel(runspace, intrinsics, psConsoleReadLineType);
     }
 
     public static Channel Singleton { get; private set; }
@@ -127,6 +139,95 @@ public class Channel : IDisposable
         await _serverPipe.StartProcessingAsync(ConnectionTimeout, CancellationToken.None);
     }
 
+    private void LocationChangedAction(object sender, LocationChangedEventArgs e)
+    {
+        _currentLocation = e.NewPath;
+    }
+
+    private void RunspaceAvailableAction(object sender, RunspaceAvailabilityEventArgs e)
+    {
+        if (sender is null || e.RunspaceAvailability is not RunspaceAvailability.Available)
+        {
+            return;
+        }
+
+        // It's safe to get states of the PowerShell Runspace now because it's available and this event
+        // is handled synchronously.
+        // We may want to invoke command or script here, and we have to unregister ourself before doing
+        // that, because the invocation would change the availability of the Runspace, which will cause
+        // the 'AvailabilityChanged' to be fired again and re-enter our handler.
+        // We register ourself back after we are done with the processing.
+        var pwshRunspace = (Runspace)sender;
+        pwshRunspace.AvailabilityChanged -= RunspaceAvailableAction;
+
+        try
+        {
+            using var ps = PowerShell.Create();
+            ps.Runspace = pwshRunspace;
+
+            var results = ps
+                .AddCommand("Get-History")
+                .AddParameter("Count", 5)
+                .InvokeAndCleanup<HistoryInfo>();
+
+            if (results.Count is 0 ||
+                (_commandHistory.Count > 0 && _commandHistory[^1].Id == results[^1].Id))
+            {
+                // No command history yet, or no change since the last update.
+                return;
+            }
+
+            lock (_commandHistory)
+            {
+                _commandHistory.Clear();
+                _commandHistory.AddRange(results);
+            }
+        }
+        finally
+        {
+            pwshRunspace.AvailabilityChanged += RunspaceAvailableAction;
+        }
+    }
+
+    private string CaptureScreen()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            PSHostRawUserInterface rawUI = _intrinsics.Host.UI.RawUI;
+            Coordinates start = new(0, 0), end = rawUI.CursorPosition;
+            end.X = rawUI.BufferSize.Width - 1;
+
+            BufferCell[,] content = rawUI.GetBufferContents(new Rectangle(start, end));
+            StringBuilder line = new(), buffer = new();
+
+            int rows = content.GetLength(0);
+            int columns = content.GetLength(1);
+
+            for (int row = 0; row < rows; row++)
+            {
+                line.Clear();
+                for (int column = 0; column < columns; column++)
+                {
+                    line.Append(content[row, column].Character);
+                }
+
+                line.TrimEnd();
+                buffer.Append(line).Append('\n');
+            }
+
+            return buffer.Length is 0 ? string.Empty : buffer.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     internal void PostQuery(PostQueryMessage message)
     {
         ThrowIfNotConnected();
@@ -138,6 +239,8 @@ public class Channel : IDisposable
         Reset();
         _connSetupWaitHandler.Dispose();
         _predictor.Unregister();
+        _runspace.AvailabilityChanged -= RunspaceAvailableAction;
+        _intrinsics.InvokeCommand.LocationChangedAction -= LocationChangedAction;
         GC.SuppressFinalize(this);
     }
 
@@ -257,8 +360,76 @@ public class Channel : IDisposable
 
     private PostContextMessage OnAskContext(AskContextMessage askContextMessage)
     {
-        // Not implemented yet.
-        return null;
+        const string RedactedValue = "***<sensitive data redacted>***";
+
+        ContextType type = askContextMessage.ContextType;
+        string[] arguments = askContextMessage.Arguments;
+
+        string contextInfo;
+        switch (type)
+        {
+            case ContextType.CurrentLocation:
+                contextInfo = JsonSerializer.Serialize(
+                    new { Provider = _currentLocation.Provider.Name, _currentLocation.Path });
+                break;
+
+            case ContextType.CommandHistory:
+                lock (_commandHistory)
+                {
+                    contextInfo = JsonSerializer.Serialize(
+                        _commandHistory.Select(o => new { o.Id, o.CommandLine }));
+                }
+                break;
+
+            case ContextType.TerminalContent:
+                contextInfo = CaptureScreen();
+                break;
+
+            case ContextType.EnvironmentVariables:
+                if (arguments is { Length: > 0 })
+                {
+                    var varsCopy = new Dictionary<string, string>();
+                    foreach (string name in arguments)
+                    {
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            varsCopy.Add(name, Environment.GetEnvironmentVariable(name) is string value
+                                ? EnvVarMayBeSensitive(name) ? RedactedValue : value
+                                : $"[env variable '{arguments}' is undefined]");
+                        }
+                    }
+
+                    contextInfo = varsCopy.Count > 0
+                        ? JsonSerializer.Serialize(varsCopy)
+                        : "The specified environment variable names are invalid";
+                }
+                else
+                {
+                    var vars = Environment.GetEnvironmentVariables();
+                    var varsCopy = new Dictionary<string, string>();
+
+                    foreach (string key in vars.Keys)
+                    {
+                        varsCopy.Add(key, EnvVarMayBeSensitive(key) ? RedactedValue : (string)vars[key]);
+                    }
+
+                    contextInfo = JsonSerializer.Serialize(varsCopy);
+                }
+                break;
+
+            default:
+                throw new InvalidDataException($"Unknown context type '{type}'");
+        }
+
+        return new PostContextMessage(contextInfo);
+
+        static bool EnvVarMayBeSensitive(string key)
+        {
+            return key.Contains("key", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("pass", StringComparison.OrdinalIgnoreCase) ||
+                key.Contains("secret", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private void OnAskConnection(ShellClientPipe clientPipe, Exception exception)
@@ -334,3 +505,39 @@ public class Channel : IDisposable
 }
 
 internal record CodePostData(string CodeToInsert, List<PredictionCandidate> PredictionCandidates);
+
+internal static class ExtensionMethods
+{
+    internal static Collection<T> InvokeAndCleanup<T>(this PowerShell ps)
+    {
+        var results = ps.Invoke<T>();
+        ps.Commands.Clear();
+
+        return results;
+    }
+
+    internal static void InvokeAndCleanup(this PowerShell ps)
+    {
+        ps.Invoke();
+        ps.Commands.Clear();
+    }
+
+    internal static void TrimEnd(this StringBuilder sb)
+    {
+        // end will point to the first non-trimmed character on the right.
+        int end = sb.Length - 1;
+        for (; end >= 0; end--)
+        {
+            if (!char.IsWhiteSpace(sb[end]))
+            {
+                break;
+            }
+        }
+
+        int index = end + 1;
+        if (index < sb.Length)
+        {
+            sb.Remove(index, sb.Length - index);
+        }
+    }
+}

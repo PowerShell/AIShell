@@ -188,6 +188,7 @@ internal enum McpType
     PropertyNameCaseInsensitive = true,
     ReadCommentHandling = JsonCommentHandling.Skip,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    NumberHandling = JsonNumberHandling.AllowReadingFromString,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(McpConfig))]
 [JsonSerializable(typeof(McpServerConfig))]

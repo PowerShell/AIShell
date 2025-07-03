@@ -43,7 +43,7 @@ public enum ContextType : int
     /// <summary>
     /// Ask for the current working directory of the shell.
     /// </summary>
-    WorkingDirectory = 0,
+    CurrentLocation = 0,
 
     /// <summary>
     /// Ask for the command history of the shell session.

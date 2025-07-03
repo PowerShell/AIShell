@@ -368,7 +368,7 @@ public class Channel : IDisposable
         string contextInfo;
         switch (type)
         {
-            case ContextType.WorkingDirectory:
+            case ContextType.CurrentLocation:
                 contextInfo = JsonSerializer.Serialize(
                     new { Provider = _currentLocation.Provider.Name, _currentLocation.Path });
                 break;

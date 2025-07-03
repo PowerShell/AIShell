@@ -17,8 +17,8 @@ public class InvokeAIShellCommand : PSCmdlet
     /// <summary>
     /// Sets and gets the query to be sent to AIShell
     /// </summary>
-    [Parameter(Mandatory = true, ValueFromRemainingArguments = true, ParameterSetName = DefaultSet)]
-    [Parameter(Mandatory = true, ValueFromRemainingArguments = true, ParameterSetName = ClipboardSet)]
+    [Parameter(Position = 0, ParameterSetName = DefaultSet)]
+    [Parameter(Position = 0, ParameterSetName = ClipboardSet)]
     public string[] Query { get; set; }
 
     /// <summary>
@@ -88,6 +88,26 @@ public class InvokeAIShellCommand : PSCmdlet
                 message = "/exit";
                 break;
             default:
+                if (Query is not null)
+                {
+                    message = string.Join(' ', Query);
+                }
+                else
+                {
+                    Host.UI.Write("Query: ");
+                    message = Host.UI.ReadLine();
+                }
+
+                if (string.IsNullOrEmpty(message))
+                {
+                    ThrowTerminatingError(
+                        new ErrorRecord(
+                            new ArgumentException("A query message is required."),
+                            "QueryIsMissing",
+                            ErrorCategory.InvalidArgument,
+                            targetObject: null));
+                }
+
                 Collection<string> results = null;
                 if (_contextObjects is not null)
                 {
@@ -107,7 +127,6 @@ public class InvokeAIShellCommand : PSCmdlet
                 }
 
                 context = results?.Count > 0 ? results[0] : null;
-                message = string.Join(' ', Query);
                 break;
         }
 

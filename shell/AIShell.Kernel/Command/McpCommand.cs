@@ -28,8 +28,9 @@ internal sealed class McpCommand : CommandBase
     {
         var shell = (Shell)Shell;
         var host = shell.Host;
+        var mcpManager = shell.McpManager;
 
-        if (shell.McpManager.McpServers.Count is 0)
+        if (mcpManager.McpServers.Count is 0 && mcpManager.BuiltInTools is null)
         {
             host.WriteErrorLine("No MCP server is available.");
             return;

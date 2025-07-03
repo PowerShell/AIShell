@@ -1,6 +1,8 @@
-﻿using Microsoft.Extensions.AI;
+﻿using AIShell.Abstraction;
+using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Threading;
 
 namespace AIShell.Kernel.Mcp;
 
@@ -12,7 +14,10 @@ internal class McpManager
     private readonly TaskCompletionSource<McpConfig> _parseMcpJsonTaskSource;
 
     private McpConfig _mcpConfig;
+    private Dictionary<string, BuiltInTool> _builtInTools;
 
+    internal const string BuiltInServerName = "AIShell";
+    internal const string ServerToolSeparator = "___";
     internal Task<McpConfig> ParseMcpJsonTask => _parseMcpJsonTaskSource.Task;
 
     internal Dictionary<string, McpServer> McpServers
@@ -21,6 +26,15 @@ internal class McpManager
         {
             _initTask.Wait();
             return _mcpServers;
+        }
+    }
+
+    internal Dictionary<string, BuiltInTool> BuiltInTools
+    {
+        get
+        {
+            _initTask.Wait();
+            return _builtInTools;
         }
     }
 
@@ -45,6 +59,8 @@ internal class McpManager
             _parseMcpJsonTaskSource.SetException(e);
         }
 
+        _builtInTools = BuiltInTool.GetBuiltInTools(_context.Shell);
+
         if (_mcpConfig is null)
         {
             return;
@@ -65,6 +81,11 @@ internal class McpManager
         await _initTask;
 
         List<AIFunction> tools = null;
+        if (_builtInTools.Count > 0)
+        {
+            (tools ??= []).AddRange(_builtInTools.Values);
+        }
+
         foreach (var (name, server) in _mcpServers)
         {
             if (server.IsOperational)
@@ -93,7 +114,7 @@ internal class McpManager
         string serverName = null, toolName = null;
 
         string functionName = functionCall.Name;
-        int dotIndex = functionName.IndexOf(McpTool.ServerToolSeparator);
+        int dotIndex = functionName.IndexOf(ServerToolSeparator);
         if (dotIndex > 0)
         {
             serverName = functionName[..dotIndex];
@@ -102,15 +123,7 @@ internal class McpManager
 
         await _initTask;
 
-        McpTool tool = null;
-        if (!string.IsNullOrEmpty(serverName)
-            && !string.IsNullOrEmpty(toolName)
-            && _mcpServers.TryGetValue(serverName, out McpServer server))
-        {
-            await server.WaitForInitAsync(cancellationToken);
-            server.Tools.TryGetValue(toolName, out tool);
-        }
-
+        AIFunction tool = await ResolveToolAsync(serverName, toolName, cancellationToken);
         if (tool is null)
         {
             return new FunctionResultContent(
@@ -122,11 +135,18 @@ internal class McpManager
 
         try
         {
-            CallToolResponse response = await tool.CallAsync(
-                new AIFunctionArguments(arguments: functionCall.Arguments),
-                cancellationToken: cancellationToken);
-
-            resultContent.Result = (object)response ?? "Success: Function completed.";
+            var args = new AIFunctionArguments(arguments: functionCall.Arguments);
+            if (tool is McpTool mcpTool)
+            {
+                CallToolResponse response = await mcpTool.CallAsync(args, cancellationToken: cancellationToken);
+                resultContent.Result = (object)response ?? "Success: Function completed.";
+            }
+            else
+            {
+                var builtInTool = (BuiltInTool)tool;
+                PipeMessage response = await builtInTool.CallAsync(args, cancellationToken);
+                resultContent.Result = (object)response ?? "Success: Function completed.";
+            }
         }
         catch (Exception e) when (!cancellationToken.IsCancellationRequested)
         {
@@ -141,6 +161,28 @@ internal class McpManager
         }
 
         return resultContent;
+    }
+
+    private async Task<AIFunction> ResolveToolAsync(string serverName, string toolName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(serverName) || string.IsNullOrEmpty(toolName))
+        {
+            return null;
+        }
+
+        if (BuiltInServerName.Equals(serverName, StringComparison.OrdinalIgnoreCase))
+        {
+            return _builtInTools.TryGetValue(toolName, out BuiltInTool builtInTool) ? builtInTool : null;
+        }
+
+        McpTool mcpTool = null;
+        if (_mcpServers.TryGetValue(serverName, out McpServer server))
+        {
+            await server.WaitForInitAsync(cancellationToken);
+            server.Tools.TryGetValue(toolName, out mcpTool);
+        }
+
+        return mcpTool;
     }
 }
 

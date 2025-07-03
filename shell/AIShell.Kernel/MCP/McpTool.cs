@@ -12,21 +12,23 @@ namespace AIShell.Kernel.Mcp;
 /// </summary>
 internal class McpTool : AIFunction
 {
+    internal static readonly string[] UserChoices = ["Continue", "Cancel"];
+
     private readonly string _fullName;
     private readonly string _serverName;
     private readonly Host _host;
     private readonly McpClientTool _clientTool;
-    private readonly string[] _userChoices;
-
-    internal const string ServerToolSeparator = "___";
 
     internal McpTool(string serverName, McpClientTool clientTool, Host host)
     {
+        ArgumentException.ThrowIfNullOrEmpty(serverName);
+        ArgumentNullException.ThrowIfNull(clientTool);
+        ArgumentNullException.ThrowIfNull(host);
+
         _host = host;
         _clientTool = clientTool;
-        _fullName = $"{serverName}{ServerToolSeparator}{clientTool.Name}";
+        _fullName = $"{serverName}{McpManager.ServerToolSeparator}{clientTool.Name}";
         _serverName = serverName;
-        _userChoices = ["Continue", "Cancel"];
     }
 
     /// <summary>
@@ -117,7 +119,7 @@ internal class McpTool : AIFunction
         const string title = "\n\u26A0  MCP servers or malicious converstaion content may attempt to misuse 'AIShell' through the installed tools. Please carefully review any requested actions to decide if you want to proceed.";
         string choice = await _host.PromptForSelectionAsync(
             title: title,
-            choices: _userChoices,
+            choices: UserChoices,
             cancellationToken: cancellationToken);
 
         if (choice is "Cancel")

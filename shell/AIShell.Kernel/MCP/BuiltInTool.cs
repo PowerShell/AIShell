@@ -1,10 +1,7 @@
 ﻿using AIShell.Abstraction;
 using Microsoft.Extensions.AI;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.ObjectiveC;
 using System.Text.Json;
-using System.Xml.Linq;
 
 namespace AIShell.Kernel.Mcp;
 
@@ -12,7 +9,7 @@ internal class BuiltInTool : AIFunction
 {
     private enum ToolType : int
     {
-        get_current_location = 0,
+        get_working_directory = 0,
         get_command_history = 1,
         get_terminal_content = 2,
         get_environment_variables = 3,
@@ -25,8 +22,8 @@ internal class BuiltInTool : AIFunction
 
     private static readonly string[] s_toolDescription =
     [
-        // get_current_location
-        "Get the current location of the connected PowerShell session, including the provider name (e.g., `FileSystem`, `Certificate`) and the path (e.g., `C:\\`, `cert:\\`).",
+        // get_working_directory
+        "Get the current working directory of the connected PowerShell session, including the provider name (e.g., `FileSystem`, `Certificate`) and the path (e.g., `C:\\`, `cert:\\`).",
 
         // get_command_history
         "Get up to 5 of the most recent commands executed in the connected PowerShell session.",
@@ -74,7 +71,7 @@ internal class BuiltInTool : AIFunction
 
     private static readonly string[] s_toolSchema =
     [
-        // get_current_location
+        // get_working_directory
         """
         {
           "type": "object",
@@ -272,7 +269,7 @@ internal class BuiltInTool : AIFunction
     {
         AskContextMessage contextRequest = _toolType switch
         {
-            ToolType.get_current_location => new(ContextType.CurrentLocation),
+            ToolType.get_working_directory => new(ContextType.CurrentLocation),
             ToolType.get_command_history => new(ContextType.CommandHistory),
             ToolType.get_terminal_content => new(ContextType.TerminalContent),
             ToolType.get_environment_variables => new(

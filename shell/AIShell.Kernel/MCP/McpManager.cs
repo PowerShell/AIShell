@@ -81,7 +81,7 @@ internal class McpManager
         await _initTask;
 
         List<AIFunction> tools = null;
-        if (_builtInTools.Count > 0)
+        if (_builtInTools is { Count: > 0 })
         {
             (tools ??= []).AddRange(_builtInTools.Values);
         }

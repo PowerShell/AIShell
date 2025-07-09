@@ -151,6 +151,7 @@ public class Channel : IDisposable
         _serverPipe.OnAskContext += OnAskContext;
         _serverPipe.OnPostCode += OnPostCode;
         _serverPipe.OnRunCommand += OnRunCommand;
+        _serverPipe.OnAskCommandOutput += OnAskCommandOutput;
 
         _serverThread = new Thread(ThreadProc)
         {
@@ -284,6 +285,7 @@ public class Channel : IDisposable
             _serverPipe.OnAskContext -= OnAskContext;
             _serverPipe.OnPostCode -= OnPostCode;
             _serverPipe.OnRunCommand -= OnRunCommand;
+            _serverPipe.OnAskCommandOutput -= OnAskCommandOutput;
         }
 
         _serverPipe = null;
@@ -488,12 +490,6 @@ public class Channel : IDisposable
         _connSetupWaitHandler.Set();
     }
 
-    private PostContextMessage OnAskContext(AskContextMessage askContextMessage)
-    {
-        // Not implemented yet.
-        return null;
-    }
-
     private PostResultMessage OnRunCommand(RunCommandMessage runCommandMessage)
     {
         // Ignore 'run_command' request when a code posting operation is on-going.
@@ -544,14 +540,13 @@ public class Channel : IDisposable
             _runCommandRequest.Event.Wait();
             RunCommandResult result = _runCommandRequest.Result;
 
-            _pwsh ??= PowerShell.Create();
-            _pwsh.Commands.Clear();
             string output = result.ErrorAndOutput.Count is 0
                 ? string.Empty
-                : _pwsh.AddCommand("Out-String")
+                : (_pwsh ??= PowerShell.Create())
+                    .AddCommand("Out-String")
                     .AddParameter("InputObject", result.ErrorAndOutput)
                     .AddParameter("Width", 120)
-                    .Invoke<string>()[0];
+                    .InvokeAndCleanup<string>()[0];
 
             PostResultMessage response = new(
                 output: output,
@@ -566,6 +561,57 @@ public class Channel : IDisposable
         }
 
         return new PostResultMessage(output: _runCommandRequest.Id, hadError: false, userCancelled: false, exception: null);
+    }
+
+    private PostResultMessage OnAskCommandOutput(AskCommandOutputMessage askOutputMessage)
+    {
+        if (_runCommandRequest is null)
+        {
+            return new PostResultMessage(
+                output: "No command was previously run in background, or the output of a background command was already retrieved.",
+                hadError: true,
+                userCancelled: false,
+                exception: null);
+        }
+
+        string commandId = askOutputMessage.CommandId;
+        if (!string.Equals(commandId, _runCommandRequest.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return new PostResultMessage(
+                output: $"The specified command id '{commandId}' cannot be found.",
+                hadError: true,
+                userCancelled: false,
+                exception: null);
+        }
+
+        if (_runCommandRequest.Result is null)
+        {
+            return new PostResultMessage(
+                output: "Command output is not yet available.",
+                hadError: true,
+                userCancelled: false,
+                exception: null);
+        }
+
+        RunCommandResult result = _runCommandRequest.Result;
+        string output = result.ErrorAndOutput.Count is 0
+            ? string.Empty
+            : (_pwsh ??= PowerShell.Create())
+                .AddCommand("Out-String")
+                .AddParameter("InputObject", result.ErrorAndOutput)
+                .AddParameter("Width", 120)
+                .InvokeAndCleanup<string>()[0];
+
+        PostResultMessage response = new(
+                output: output,
+                hadError: result.HadErrors,
+                userCancelled: result.UserCancelled,
+                exception: null);
+
+        _runCommandRequest.Dispose();
+        _runCommandRequest = null;
+
+        return response;
     }
 
     private void PSRLInsert(string text)

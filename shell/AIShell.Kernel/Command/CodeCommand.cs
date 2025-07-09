@@ -36,13 +36,6 @@ internal sealed class CodeCommand : CommandBase
         copy.SetHandler(CopyAction, nth);
         save.SetHandler(SaveAction, file, append);
         post.SetHandler(PostAction, nth);
-
-
-        var run = new Command("run", "Run the specified command.");
-        var command = new Argument<string>("command", "command to run");
-        run.AddArgument(command);
-        run.SetHandler(RunAction, command);
-        AddCommand(run);
     }
 
     private static string GetCodeText(Shell shell, int index)
@@ -187,14 +180,5 @@ internal sealed class CodeCommand : CommandBase
         {
             host.WriteErrorLine(e.Message);
         }
-    }
-
-    private async Task RunAction(string command)
-    {
-        var shell = (Shell)Shell;
-        var host = shell.Host;
-        var result = await shell.Channel.RunCommand(new RunCommandMessage(command, blocking: true), shell.CancellationToken);
-
-        host.WriteLine($"HadError: {result.HadError}\nUserCancelled: {result.UserCancelled}\nOutput: {result.Output}\nException: {result.Exception}");
     }
 }

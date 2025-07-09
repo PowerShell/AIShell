@@ -1,6 +1,7 @@
 ﻿using AIShell.Abstraction;
 using Microsoft.Extensions.AI;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace AIShell.Kernel.Mcp;
@@ -16,7 +17,7 @@ internal class BuiltInTool : AIFunction
         copy_text_to_clipboard = 4,
         post_code_to_terminal = 5,
         run_command_in_terminal = 6,
-        get_terminal_output = 7,
+        get_command_output = 7,
         NumberOfBuiltInTools = 8
     };
 
@@ -58,15 +59,15 @@ internal class BuiltInTool : AIFunction
 
         Background Processes:
         - For long-running tasks (e.g., servers), set `isBackground=true`.
-        - Returns a terminal ID for checking status and runtime later.
+        - Returns a command ID for checking status and output later.
 
         Important Notes:
         - If the command may produce excessively large output, use head or tail to reduce the output.
         - If a command may use a pager, you must add something to disable it. For example, you can use `git --no-pager`. Otherwise you should add something like ` | cat`. Examples: git, less, man, etc.
         """,
 
-        // get_terminal_output
-        "Get the output of a command previous started with `run_command_in_terminal`"
+        // get_command_output
+        "Get the output of a command previously started with `run_command_in_terminal`."
     ];
 
     private static readonly string[] s_toolSchema =
@@ -171,7 +172,7 @@ internal class BuiltInTool : AIFunction
             },
             "isBackground": {
               "type": "boolean",
-              "description": "Whether the command starts a background process. If true, the command will run in the background and you will not see the output. If false, the tool call will block on the command finishing, and then you will get the output. Examples of backgrond processes: building in watch mode, starting a server. You can check the output of a backgrond process later on by using get_terminal_output."
+              "description": "Whether the command starts a background process. If true, the command will run in the background and you will not see the output. If false, the tool call will block on the command finishing, and then you will get the output. Examples of backgrond processes: building in watch mode, starting a server. You can check the output of a backgrond process later on by using `get_command_output`."
             }
           },
           "required": [
@@ -184,7 +185,7 @@ internal class BuiltInTool : AIFunction
         }
         """,
 
-        // get_terminal_output
+        // get_command_output
         """
         {
           "type": "object",
@@ -248,6 +249,22 @@ internal class BuiltInTool : AIFunction
             return postContextMsg.ContextInfo;
         }
 
+        if (response is PostResultMessage postResultMsg)
+        {
+            StringBuilder strb = new(postResultMsg.Output.Length + 40);
+            strb.AppendLine("### Status")
+                .AppendLine(postResultMsg.UserCancelled
+                    ? "Execution was cancelled by the user."
+                    : postResultMsg.HadError ? "Had error." : "Succeeded.")
+                .AppendLine()
+                .AppendLine("### Output")
+                .AppendLine("```")
+                .AppendLine(postResultMsg.Output.Trim())
+                .AppendLine("```");
+
+            return strb.ToString();
+        }
+
         return response is null ? "Success: Function completed." : JsonSerializer.SerializeToElement(response);
     }
 
@@ -267,6 +284,7 @@ internal class BuiltInTool : AIFunction
         IReadOnlyDictionary<string, object> arguments = null,
         CancellationToken cancellationToken = default)
     {
+        PipeMessage response = null;
         AskContextMessage contextRequest = _toolType switch
         {
             ToolType.get_working_directory => new(ContextType.CurrentLocation),
@@ -280,12 +298,8 @@ internal class BuiltInTool : AIFunction
             _ => null
         };
 
-        bool succeeded = false;
-        PostContextMessage response = null;
-
         if (contextRequest is not null)
         {
-            succeeded = true;
             response = await _shell.Host.RunWithSpinnerAsync(
                 async () => await _shell.Channel.AskContext(contextRequest, cancellationToken),
                 status: $"Running '{_toolName}'",
@@ -294,39 +308,74 @@ internal class BuiltInTool : AIFunction
         else if (_toolType is ToolType.copy_text_to_clipboard)
         {
             TryGetArgumentValue(arguments, "content", out string content);
-
             if (string.IsNullOrEmpty(content))
             {
                 throw new ArgumentException("The 'content' argument is required for the 'copy_text_to_clipboard' tool.");
             }
 
-            succeeded = true;
             Clipboard.SetText(content);
         }
         else if (_toolType is ToolType.post_code_to_terminal)
         {
             TryGetArgumentValue(arguments, "command", out string command);
-
             if (string.IsNullOrEmpty(command))
             {
                 throw new ArgumentException("The 'command' argument is required for the 'post_code_to_terminal' tool.");
             }
 
-            succeeded = true;
             _shell.Channel.PostCode(new PostCodeMessage([command]));
         }
-
-        if (succeeded)
+        else if (_toolType is ToolType.run_command_in_terminal)
         {
-            // Notify the user about this tool call.
-            _shell.Host.MarkupLine($"\n    [green]\u2713[/] Ran '{_toolName}'");
-            // Signal any active stream reander about the output
-            FancyStreamRender.ConsoleUpdated();
+            TryGetArgumentValue(arguments, "command", out string command);
+            TryGetArgumentValue(arguments, "explanation", out string explanation);
+            TryGetArgumentValue(arguments, "isBackground", out bool isBackground);
 
-            return response;
+            if (string.IsNullOrEmpty(command))
+            {
+                throw new ArgumentException("The 'command' argument is required for the 'run_command_in_terminal' tool.");
+            }
+            if (string.IsNullOrEmpty(explanation))
+            {
+                throw new ArgumentException("The 'explanation' argument is required for the 'run_command_in_terminal' tool.");
+            }
+
+            _shell.Host.RenderBuiltInToolCallRequest(OriginalName, explanation, Tuple.Create("command", command));
+            // Prompt for user's approval to call the tool.
+            const string title = "\n\u26A0  Malicious converstaion content may attempt to misuse 'AIShell' through the built-in tools. Please carefully review any requested actions to decide if you want to proceed.";
+            string choice = await _shell.Host.PromptForSelectionAsync(
+                title: title,
+                choices: McpTool.UserChoices,
+                cancellationToken: cancellationToken);
+
+            if (choice is "Cancel")
+            {
+                _shell.Host.MarkupLine($"\n    [red]\u2717[/] Cancelled '{OriginalName}'");
+                throw new OperationCanceledException("The call was rejected by user.");
+            }
+
+            response = await _shell.Host.RunWithSpinnerAsync(
+                async () => await _shell.Channel.RunCommand(new RunCommandMessage(command, blocking: !isBackground), cancellationToken),
+                status: $"Running '{_toolName}'",
+                spinnerKind: SpinnerKind.Processing);
+        }
+        else if (_toolType is ToolType.get_command_output)
+        {
+            TryGetArgumentValue(arguments, "id", out string id);
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new ArgumentException("The 'id' argument is required for the 'get_command_output' tool.");
+            }
+
+            response = await _shell.Channel.AskCommandOutput(new AskCommandOutputMessage(id), cancellationToken);
         }
 
-        throw new NotSupportedException($"Tool type '{_toolType}' is not yet supported.");
+        // Notify the user about this tool call.
+        _shell.Host.MarkupLine($"\n    [green]\u2713[/] Ran '{_toolName}'");
+
+        // Signal any active stream render about the output.
+        FancyStreamRender.ConsoleUpdated();
+        return response;
     }
 
     private static bool TryGetArgumentValue<T>(IReadOnlyDictionary<string, object> arguments, string argName, out T value)
@@ -398,8 +447,8 @@ internal class BuiltInTool : AIFunction
     {
         ArgumentNullException.ThrowIfNull(shell);
 
-        // We don't have the 'run_command' and 'get_terminal_output' tools yet. Will use 'ToolType.NumberOfBuiltInTools' when all tools are ready.
-        int toolCount = (int)ToolType.run_command_in_terminal;
+        // We don't have the 'run_command' and 'get_command_output' tools yet. Will use 'ToolType.NumberOfBuiltInTools' when all tools are ready.
+        int toolCount = (int)ToolType.NumberOfBuiltInTools;
         Debug.Assert(s_toolDescription.Length == (int)ToolType.NumberOfBuiltInTools, "Number of tool descriptions doesn't match the number of tools.");
         Debug.Assert(s_toolSchema.Length == (int)ToolType.NumberOfBuiltInTools, "Number of tool schemas doesn't match the number of tools.");
 

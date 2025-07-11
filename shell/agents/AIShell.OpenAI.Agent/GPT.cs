@@ -50,7 +50,6 @@ public class GPT
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentException.ThrowIfNullOrEmpty(description);
         ArgumentException.ThrowIfNullOrEmpty(modelName);
-        ArgumentException.ThrowIfNullOrEmpty(systemPrompt);
 
         Name = name;
         Description = description;

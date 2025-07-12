@@ -69,7 +69,7 @@ internal class ChatService
         OpenAIChatClient client;
         EndpointType type = _gptToUse.Type;
         // Reasoning models do not support the temperature setting.
-        _chatOptions.Temperature = _gptToUse.ModelInfo.Reasoning ? null : 0;
+        _chatOptions.Temperature = _gptToUse.ModelInfo.Reasoning ? null : 0.5f;
 
         if (type is EndpointType.AzureOpenAI)
         {
@@ -131,22 +131,21 @@ internal class ChatService
             .Build();
     }
 
-    private void PrepareForChat(string input)
+    private void PrepareForChat(string input, IShell shell)
     {
-        const string Guidelines = """
-            ## Tool Use Guidelines
-            You may have access to external tools.
-            Before making any tool call, you must first explain the reason for using the tool. Only issue the tool call after providing this explanation.
-
-            ## Other Guidelines
-            """;
-
         // Refresh the client in case the active model was changed.
         RefreshOpenAIClient();
 
         if (_chatHistory.Count is 0)
         {
-            string system = $"{Guidelines}\n{_gptToUse.SystemPrompt}";
+            string system = _gptToUse.SystemPrompt;
+            if (string.IsNullOrEmpty(system))
+            {
+                system = shell.ChannelEstablished
+                    ? Prompt.SystemPromptWithConnectedPSSession
+                    : Prompt.SystemPrompForStandaloneApp;
+            }
+
             _chatHistory.Add(new(ChatRole.System, system));
         }
 
@@ -157,7 +156,8 @@ internal class ChatService
     {
         try
         {
-            PrepareForChat(input);
+            PrepareForChat(input, shell);
+
             var tools = await shell.GetAIFunctions();
             if (tools is { Count: > 0 })
             {

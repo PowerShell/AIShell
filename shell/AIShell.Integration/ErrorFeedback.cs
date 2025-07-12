@@ -34,7 +34,7 @@ public sealed class ErrorFeedback : IFeedbackProvider
         Channel channel = Channel.Singleton;
         if (channel.CheckConnection(blocking: false, out _))
         {
-            string query = CreateQueryForError(context.CommandLine, context.LastError, channel);
+            string query = CreateQueryForError(context.LastError);
             PostQueryMessage message = new(query, context: null, agent: null);
             channel.PostQuery(message);
 
@@ -44,37 +44,37 @@ public sealed class ErrorFeedback : IFeedbackProvider
         return null;
     }
 
-    internal static string CreateQueryForError(string commandLine, ErrorRecord lastError, Channel channel)
+    internal static string CreateQueryForError(ErrorRecord lastError)
     {
         Exception exception = lastError.Exception;
         StringBuilder sb = new StringBuilder(capacity: 100)
-            .Append(
-                $"""
-                Running the command line `{commandLine}` in PowerShell v{channel.PSVersion} failed.
-                Please try to explain the failure and suggest the right fix.
-                The error details can be found below in the markdown format.
-                """)
-            .Append("\n\n")
-            .Append("# Error Details\n")
+            .Append("Please troubleshoot the command-line error that happend in the connected PowerShell session, and suggest the fix. The error details are given below:\n\n---\n\n")
+            .Append("## Command Line\n")
+            .Append("```\n")
+            .Append(lastError.InvocationInfo.Line).Append('\n')
+            .Append("```\n\n")
             .Append("## Exception Messages\n")
             .Append($"{exception.GetType().FullName}: {exception.Message}\n");
 
         exception = exception.InnerException;
         if (exception is not null)
         {
-            sb.Append("Inner Exceptions:\n");
+            sb.Append("\nInner Exceptions:\n");
             do
             {
-                sb.Append($"  - {exception.GetType().FullName}: {exception.Message}\n");
+                sb.Append($"- {exception.GetType().FullName}: {exception.Message}\n");
                 exception = exception.InnerException;
             }
             while (exception is not null);
         }
 
-        string positionMessage = lastError.InvocationInfo?.PositionMessage;
+        string positionMessage = lastError.InvocationInfo.PositionMessage;
         if (!string.IsNullOrEmpty(positionMessage))
         {
-            sb.Append("## Error Position\n").Append(positionMessage).Append('\n');
+            sb.Append("\n## Error Position\n")
+              .Append("```\n")
+              .Append(positionMessage).Append('\n')
+              .Append("```\n");
         }
 
         return sb.ToString();

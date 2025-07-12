@@ -121,7 +121,7 @@ public class ResolveErrorCommand : PSCmdlet
         else
         {
             // When reaching here, we have
-            //  - Last error doesn't map to the last history command;
+            //  - Last error doesn't map to the last history command, or $Error is empty;
             //  - $LastExitCode is non-zero;
             //  - $? is true.
             // The user may want to fix a command that failed previously, but it's unknown whether

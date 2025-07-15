@@ -570,9 +570,9 @@ internal sealed class Host : IHost
     /// </summary>
     /// <param name="tool">The MCP tool.</param>
     /// <param name="jsonArgs">The arguments in JSON form to be sent for the tool call.</param>
-    internal void RenderToolCallRequest(McpTool tool, string jsonArgs)
+    internal void RenderMcpToolCallRequest(McpTool tool, string jsonArgs)
     {
-        RequireStdoutOrStderr(operation: "render tool call request");
+        RequireStdoutOrStderr(operation: "render MCP tool call request");
         IAnsiConsole ansiConsole = _outputRedirected ? _stderrConsole : AnsiConsole.Console;
 
         bool hasArgs = !string.IsNullOrEmpty(jsonArgs);
@@ -597,6 +597,44 @@ internal sealed class Host : IHost
                 .AddColumn(new GridColumn())
                 .AddRow(content)
                 .AddRow(json);
+        }
+
+        var panel = new Panel(content)
+            .Expand()
+            .RoundedBorder()
+            .Header("[green]  Tool Call Request  [/]")
+            .BorderColor(Color.Grey);
+
+        ansiConsole.WriteLine();
+        ansiConsole.Write(panel);
+        FancyStreamRender.ConsoleUpdated();
+    }
+
+    /// <summary>
+    /// Render the built-in tool call request.
+    /// </summary>
+    internal void RenderBuiltInToolCallRequest(string toolName, string description, Tuple<string, string> argument)
+    {
+        RequireStdoutOrStderr(operation: "render built-in tool call request");
+        IAnsiConsole ansiConsole = _outputRedirected ? _stderrConsole : AnsiConsole.Console;
+
+        bool hasArgs = argument is not null;
+        string argLine = hasArgs ? $"{argument.Item1}:" : $"Input: <none>";
+        IRenderable content = new Markup($"""
+
+            [bold]Run [olive]{toolName}[/] from [olive]{McpManager.BuiltInServerName}[/] (Built-in tool)[/]
+
+            {description}
+
+            {argLine}
+            """);
+
+        if (hasArgs)
+        {
+            content = new Grid()
+                .AddColumn(new GridColumn())
+                .AddRow(content)
+                .AddRow(argument.Item2.EscapeMarkup());
         }
 
         var panel = new Panel(content)
@@ -672,7 +710,13 @@ internal sealed class Host : IHost
             toolTable.AddRow($"[olive underline]{McpManager.BuiltInServerName}[/]", "[green]\u2713 Ready[/]", string.Empty);
             foreach (var item in mcpManager.BuiltInTools)
             {
-                toolTable.AddRow(string.Empty, item.Key.EscapeMarkup(), item.Value.Description.EscapeMarkup());
+                string description = item.Value.Description;
+                int index = description.IndexOf('\n');
+                if (index > 0)
+                {
+                    description = description[..index].Trim();
+                }
+                toolTable.AddRow(string.Empty, item.Key.EscapeMarkup(), description.EscapeMarkup());
             }
         }
 

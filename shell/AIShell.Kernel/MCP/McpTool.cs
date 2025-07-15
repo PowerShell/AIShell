@@ -113,10 +113,10 @@ internal class McpTool : AIFunction
         string jsonArgs = arguments is { Count: > 0 }
             ? JsonSerializer.Serialize(arguments, serializerOptions ?? JsonSerializerOptions)
             : null;
-        _host.RenderToolCallRequest(this, jsonArgs);
+        _host.RenderMcpToolCallRequest(this, jsonArgs);
 
         // Prompt for user's approval to call the tool.
-        const string title = "\n\u26A0  MCP servers or malicious converstaion content may attempt to misuse 'AIShell' through the installed tools. Please carefully review any requested actions to decide if you want to proceed.";
+        const string title = "\n\u26A0  MCP servers or malicious conversation content may attempt to misuse 'AIShell' through the installed tools. Please carefully review any requested actions to decide if you want to proceed.";
         string choice = await _host.PromptForSelectionAsync(
             title: title,
             choices: UserChoices,

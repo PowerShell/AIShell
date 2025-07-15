@@ -342,7 +342,7 @@ internal class BuiltInTool : AIFunction
 
             _shell.Host.RenderBuiltInToolCallRequest(OriginalName, explanation, Tuple.Create("command", command));
             // Prompt for user's approval to call the tool.
-            const string title = "\n\u26A0  Malicious converstaion content may attempt to misuse 'AIShell' through the built-in tools. Please carefully review any requested actions to decide if you want to proceed.";
+            const string title = "\n\u26A0  Malicious conversation content may attempt to misuse 'AIShell' through the built-in tools. Please carefully review any requested actions to decide if you want to proceed.";
             string choice = await _shell.Host.PromptForSelectionAsync(
                 title: title,
                 choices: McpTool.UserChoices,

@@ -212,6 +212,10 @@ public class Channel : IDisposable
                 _commandHistory.AddRange(results);
             }
         }
+        catch
+        {
+            // Ignore unexpected exceptions.
+        }
         finally
         {
             pwshRunspace.AvailabilityChanged += RunspaceAvailableAction;

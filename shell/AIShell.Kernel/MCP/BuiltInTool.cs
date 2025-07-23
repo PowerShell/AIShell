@@ -447,7 +447,6 @@ internal class BuiltInTool : AIFunction
     {
         ArgumentNullException.ThrowIfNull(shell);
 
-        // We don't have the 'run_command' and 'get_command_output' tools yet. Will use 'ToolType.NumberOfBuiltInTools' when all tools are ready.
         int toolCount = (int)ToolType.NumberOfBuiltInTools;
         Debug.Assert(s_toolDescription.Length == (int)ToolType.NumberOfBuiltInTools, "Number of tool descriptions doesn't match the number of tools.");
         Debug.Assert(s_toolSchema.Length == (int)ToolType.NumberOfBuiltInTools, "Number of tool schemas doesn't match the number of tools.");

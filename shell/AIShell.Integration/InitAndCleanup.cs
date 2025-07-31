@@ -7,7 +7,7 @@ namespace AIShell.Integration;
 
 public class InitAndCleanup : IModuleAssemblyInitializer, IModuleAssemblyCleanup
 {
-    private const int ScriptVersion = 1;
+    private const int ScriptVersion = 2;
     private const string ScriptFileTemplate = "aish_split_pane_v{0}.py";
     private const string SplitPanePythonCode = """
         import iterm2
@@ -31,7 +31,8 @@ public class InitAndCleanup : IModuleAssemblyInitializer, IModuleAssemblyCleanup
 
                 change = iterm2.LocalWriteOnlyProfile()
                 change.set_use_custom_command('Yes')
-                change.set_command(f'{app_path} --channel {channel}')
+                # Use login shell to inherit proper PATH and environment
+                change.set_command(f'/bin/zsh -l -c "{app_path} --channel {channel}"')
 
                 # Split pane vertically
                 split_pane = await current_pane.async_split_pane(vertical=True, profile_customizations=change)

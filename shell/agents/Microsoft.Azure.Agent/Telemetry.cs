@@ -1,8 +1,7 @@
 using System.Text.Json;
 
 using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.WorkerService;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.ApplicationInsights.Extensibility;
 
 namespace Microsoft.Azure.Agent;
 
@@ -198,21 +197,12 @@ internal class Telemetry
 
     private Telemetry()
     {
-        // Being a regular console app, there is no appsettings.json or configuration providers enabled by default.
-        // Hence connection string must be specified here.
-        IServiceCollection services = new ServiceCollection()
-            .AddApplicationInsightsTelemetryWorkerService((ApplicationInsightsServiceOptions options) =>
-                {
-                    // Application insights in the AME environment.
-                    options.ConnectionString = "InstrumentationKey=7a75c4d0-ae0b-4a63-9fb3-b99271f79537";
-                    options.EnableHeartbeat = false;
-                    options.EnableDiagnosticsTelemetryModule = false;
-                });
+        // Create TelemetryConfiguration with connection string
+        var config = TelemetryConfiguration.CreateDefault();
+        config.ConnectionString = "InstrumentationKey=7a75c4d0-ae0b-4a63-9fb3-b99271f79537";
 
-        // Obtain TelemetryClient instance from DI, for additional manual tracking or to flush.
-        _telemetryClient = services
-            .BuildServiceProvider()
-            .GetRequiredService<TelemetryClient>();
+        // Create TelemetryClient with the configuration
+        _telemetryClient = new TelemetryClient(config);
 
         // Suppress the PII recorded by default to reduce risk.
         _telemetryClient.Context.Cloud.RoleInstance = "Not Available";

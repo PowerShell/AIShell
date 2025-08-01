@@ -197,8 +197,8 @@ internal class Telemetry
 
     private Telemetry()
     {
-        // Create TelemetryConfiguration with connection string
         var config = TelemetryConfiguration.CreateDefault();
+        // Application insights in the AME environment.
         config.ConnectionString = "InstrumentationKey=7a75c4d0-ae0b-4a63-9fb3-b99271f79537";
 
         // Create TelemetryClient with the configuration

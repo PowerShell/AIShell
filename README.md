@@ -29,7 +29,19 @@ PowerShell 7. For more information see,
 
 ### AI Shell in PowerShell
 
-![GIF showing demo of the AI Shell in PowerShell][21]
+#### The `Azure` agent and Parameter Injection feature
+
+![GIF showing demo of Azure agent][21]
+
+#### The autonomous `openai-gpt` agent
+
+![GIF showing demo 1 of openai agent][23]
+
+![GIF showing demo 2 of openai agent][24]
+
+![GIF showing demo 3 of openai agent][25]
+
+![GIF showing demo 4 of openai agent][26]
 
 ### Standalone experience
 
@@ -190,4 +202,8 @@ bugs, suggestions, or feedback. If you would like to give more candid feedback a
 [20]: ./docs/media/DemoGIFs/standalone-startup.gif
 [21]: ./docs/media/DemoGIFs/azure-agent.gif
 [22]: https://aka.ms/AIShell-Feedback
+[23]: ./docs/media/DemoGIFs/openai-agent-1.gif
+[24]: ./docs/media/DemoGIFs/openai-agent-2.gif
+[25]: ./docs/media/DemoGIFs/openai-agent-3.gif
+[26]: ./docs/media/DemoGIFs/openai-agent-4.gif
 [logo]: ./docs/media/AIShellIconSVG.svg

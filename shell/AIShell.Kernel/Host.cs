@@ -580,7 +580,7 @@ internal sealed class Host : IHost
 
             [bold]Run [olive]{tool.OriginalName}[/] from [olive]{tool.ServerName}[/] (MCP server)[/]
 
-            {tool.Description}
+            {tool.Description.EscapeMarkup()}
 
             Input:{(hasArgs ? string.Empty : " <none>")}
             """);

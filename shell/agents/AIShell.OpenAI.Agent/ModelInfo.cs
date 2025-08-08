@@ -25,6 +25,7 @@ internal class ModelInfo
             ["o1"]            = new(tokenLimit: 200_000, encoding: Gpt4oEncoding, reasoning: true),
             ["o3"]            = new(tokenLimit: 200_000, encoding: Gpt4oEncoding, reasoning: true),
             ["o4-mini"]       = new(tokenLimit: 200_000, encoding: Gpt4oEncoding, reasoning: true),
+            ["gpt-5"]         = new(tokenLimit: 400_000, encoding: Gpt4oEncoding, reasoning: true),
             ["gpt-4.1"]       = new(tokenLimit: 1_047_576, encoding: Gpt4oEncoding),
             ["gpt-4o"]        = new(tokenLimit: 128_000, encoding: Gpt4oEncoding),
             ["gpt-4"]         = new(tokenLimit: 8_192),

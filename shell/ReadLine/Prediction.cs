@@ -85,7 +85,7 @@ namespace Microsoft.PowerShell
 
     public partial class PSConsoleReadLine
     {
-        private const string DefaultName = "PSReadLine";
+        private const string DefaultName = "AIShell";
         private readonly Prediction _prediction;
 
         /// <summary>

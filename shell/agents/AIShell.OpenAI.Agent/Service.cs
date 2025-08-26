@@ -101,7 +101,14 @@ internal class ChatService
             }
             else
             {
-                var credential = new DefaultAzureCredential(includeInteractiveCredentials: true);
+                var credential = new DefaultAzureCredential(
+                    new DefaultAzureCredentialOptions
+                    {
+                        ExcludeInteractiveBrowserCredential = false,
+                        ExcludeEnvironmentCredential = true,
+                        ExcludeManagedIdentityCredential = true,
+                    }
+                );
 
                 var aiClient = new AzureOpenAIClient(
                     new Uri(_gptToUse.Endpoint),

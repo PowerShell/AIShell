@@ -694,7 +694,12 @@ internal sealed class Shell : IShell
                     while (ex.InnerException is { })
                     {
                         sb ??= new(message, capacity: message.Length * 3);
-                        sb.Append($"\n   Inner -> {ex.InnerException.Message}");
+                        if (sb[^1] is not '\n')
+                        {
+                            sb.Append('\n');
+                        }
+
+                        sb.Append($"   Inner -> {ex.InnerException.Message}");
                         ex = ex.InnerException;
                     }
 
@@ -703,8 +708,9 @@ internal sealed class Shell : IShell
                         message = sb.ToString();
                     }
 
+                    string separator = message.EndsWith('\n') ? "\n" : "\n\n";
                     Host.WriteErrorLine()
-                        .WriteErrorLine($"Agent failed to generate a response: {message}\n\n{stackTrace}")
+                        .WriteErrorLine($"Agent failed to generate a response: {message}{separator}{stackTrace}")
                         .WriteErrorLine();
                 }
             }

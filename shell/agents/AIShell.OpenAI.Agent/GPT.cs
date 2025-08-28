@@ -55,13 +55,16 @@ public class GPT
         Description = description;
         Endpoint = endpoint?.Trim().TrimEnd('/');
         Deployment = deployment;
-        ModelName = modelName.ToLowerInvariant();
         SystemPrompt = systemPrompt;
         Key = key;
         AuthType = authType;
 
         Dirty = false;
-        ModelInfo = ModelInfo.TryResolve(ModelName, out var model) ? model : null;
+        ModelInfo = ModelInfo.TryResolve(modelName, out var model) ? model : null;
+
+        // OpenAI models require the model name to be lower case. e.g., 'gpt-4.1' works but not 'GPT-4.1'.
+        // However, custom endpoint may be case-sensitive on the model name, such as Foundry Local.
+        ModelName = ModelInfo is { } ? modelName.ToLowerInvariant() : modelName;
 
         bool noEndpoint = string.IsNullOrEmpty(Endpoint);
         bool noDeployment = string.IsNullOrEmpty(Deployment);

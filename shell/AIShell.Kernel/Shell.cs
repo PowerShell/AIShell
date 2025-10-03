@@ -144,6 +144,8 @@ internal sealed class Shell : IShell
         {
             ShowLandingPage();
         }
+
+        Telemetry.TrackSession();
     }
 
     internal void ShowBanner()
@@ -678,6 +680,8 @@ internal sealed class Shell : IShell
                             .MarkupWarningLine($"[[{Utils.AppName}]]: Agent self-check failed. Resolve the issue as instructed and try again.")
                             .MarkupWarningLine($"[[{Utils.AppName}]]: Run {Formatter.Command($"/agent config {agent.Impl.Name}")} to edit the settings for the agent.");
                     }
+
+                    Telemetry.TrackQuery(agent.Impl.Name);
                 }
                 catch (Exception ex)
                 {
@@ -741,6 +745,8 @@ internal sealed class Shell : IShell
         {
             await _activeAgent.Impl.RefreshChatAsync(this, force: false);
             await _activeAgent.Impl.ChatAsync(prompt, this);
+
+            Telemetry.TrackQuery(_activeAgent.Impl.Name);
         }
         catch (OperationCanceledException)
         {

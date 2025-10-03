@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console.Json" Version="0.50.0" />
     <PackageReference Include="ModelContextProtocol.Core" Version="0.2.0-preview.3" />
+    <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -689,7 +689,8 @@ internal sealed class Shell : IShell
 
                     StringBuilder sb = null;
                     string message = ex.Message;
-                    string stackTrace = ex.StackTrace;
+                    // Skip displaying call stack for "HTTP 429" (Too Many Requests) errors to reduce clutter.
+                    string stackTrace = message.Contains("HTTP 429") ? null : ex.StackTrace;
 
                     while (ex.InnerException is { })
                     {

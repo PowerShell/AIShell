@@ -595,6 +595,7 @@ internal sealed class Shell : IShell
         while (!Exit)
         {
             string input = null;
+            bool isRemoteQuery = false;
             LLMAgent agent = _activeAgent;
 
             try
@@ -614,6 +615,7 @@ internal sealed class Shell : IShell
                         // Write out the remote query, in the same style as user typing.
                         Host.Markup($"\n>> Remote Query Received:\n");
                         Host.MarkupLine($"[teal]{input.EscapeMarkup()}[/]");
+                        isRemoteQuery = true;
                     }
                     else
                     {
@@ -681,7 +683,7 @@ internal sealed class Shell : IShell
                             .MarkupWarningLine($"[[{Utils.AppName}]]: Run {Formatter.Command($"/agent config {agent.Impl.Name}")} to edit the settings for the agent.");
                     }
 
-                    Telemetry.TrackQuery(agent.Impl.Name);
+                    Telemetry.TrackQuery(agent.Impl.Name, isRemoteQuery);
                 }
                 catch (Exception ex)
                 {
@@ -746,7 +748,7 @@ internal sealed class Shell : IShell
             await _activeAgent.Impl.RefreshChatAsync(this, force: false);
             await _activeAgent.Impl.ChatAsync(prompt, this);
 
-            Telemetry.TrackQuery(_activeAgent.Impl.Name);
+            Telemetry.TrackQuery(_activeAgent.Impl.Name, isRemote: false);
         }
         catch (OperationCanceledException)
         {

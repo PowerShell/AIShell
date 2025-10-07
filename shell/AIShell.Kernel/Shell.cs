@@ -145,7 +145,7 @@ internal sealed class Shell : IShell
             ShowLandingPage();
         }
 
-        Telemetry.TrackSession();
+        Telemetry.TrackSession(standalone: Channel is null);
     }
 
     internal void ShowBanner()

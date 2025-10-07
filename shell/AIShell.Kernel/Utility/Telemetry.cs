@@ -38,7 +38,7 @@ internal class Telemetry
                 ? "Windows"
                 : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
 
-            s_sessionCount = new MetricIdentifier(MetricNamespace, "SessionCount", "uuid", "os");
+            s_sessionCount = new MetricIdentifier(MetricNamespace, "SessionCount", "uuid", "os", "standalone");
             s_queryCount = new MetricIdentifier(MetricNamespace, "QueryCount", "uuid", "agent");
             s_knownAgents = ["openai-gpt", "azure", "interpreter", "ollama", "PhiSilica"];
         }
@@ -240,11 +240,11 @@ internal class Telemetry
         return defaultValue;
     }
 
-    internal static void TrackSession()
+    internal static void TrackSession(bool standalone)
     {
         if (s_enabled)
         {
-            s_client.GetMetric(s_sessionCount).TrackValue(1.0, s_uniqueId, s_os);
+            s_client.GetMetric(s_sessionCount).TrackValue(1.0, s_uniqueId, s_os, standalone ? "true" : "false");
         }
     }
 

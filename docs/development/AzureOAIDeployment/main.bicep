@@ -8,10 +8,10 @@ param customDomainName string = '<Insert own unique domain name>'
 param modeldeploymentname string = '<Insert own deployment name>'
 
 @description('The model being deployed')
-param model string = 'gpt-4'
+param model string = 'gpt-4o'
 
 @description('Version of the model being deployed')
-param modelversion string = 'turbo-2024-04-09'
+param modelversion string = '2024-11-20'
 
 @description('Capacity for specific model used')
 param capacity int = 80
@@ -24,7 +24,7 @@ param location string = resourceGroup().location
 ])
 param sku string = 'S0'
 
-resource openAIService 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+resource openAIService 'Microsoft.CognitiveServices/accounts@2025-10-01-preview' = {
   name: aiserviceaccountname
   location: location
   identity: {
@@ -39,7 +39,7 @@ resource openAIService 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
 }
 
-resource azopenaideployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+resource azopenaideployment 'Microsoft.CognitiveServices/accounts/deployments@2025-10-01-preview' = {
     parent: openAIService
     name: modeldeploymentname
     properties: {

@@ -15,7 +15,7 @@
 > - No new features or bug fixes are planned
 > - The project should be considered archived from an engineering standpoint
 >
-> We will update this notice if the status of the project change in the future.
+> We will update this notice if the status of the project changes.
 >
 > Thank you for your support and understanding.
 

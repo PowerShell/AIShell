@@ -1,5 +1,22 @@
 # AI Shell
 
+> [!IMPORTANT]  
+> ⚠️ Project Status Update: 
+> 
+> AI Shell is No Longer Maintained
+> As of January 2026, the AI Shell project is no longer being actively maintained by the team.
+> At this time, future releases or updates to AI Shell are very unlikely.
+> We want to thank everyone who experimented with the project, filed issues, and provided feedback. Your engagement helped us explore what AI-assisted terminal experiences could look like.
+> The repository will remain available in its current state for reference, but:
+>   - Issues and pull requests are not being monitored
+>   - No new features or bug fixes are planned
+>   - The project should be considered archived from an engineering standpoint
+> 
+> If the status of the project changes in the future, we will update this notice accordingly.
+> Thank you for your support and understanding.
+
+
+
 Welcome to the **AI Shell** repository! AI Shell is a CLI tool that brings the power of artificial
 intelligence directly to your command line! Designed to help you get command assistance from various
 AI assistants, AI Shell is a versatile tool to help you become more productive in the command line.
